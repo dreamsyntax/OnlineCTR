@@ -20,7 +20,6 @@ Arcade mode loads the original 8 characters into RAM, plus the one you chose.
 Therefore, choosing a character that is not in the original 8, will cause the other player to crash
 
 In Track Selection, let the host browse the tracks, the client should not touch anything
-The client should see the text change, but the video wont change. Don't worry
 
 Let the host start the race, the client should automatically copy the server
 When the race starts, you should only see 2 racers. If you see 8, something went wrong

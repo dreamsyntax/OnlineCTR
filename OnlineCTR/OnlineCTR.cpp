@@ -695,21 +695,27 @@ int main(int argc, char **argv)
 
 							// This does not work
 							// Come back to it
-							/*if (ogTrackByte != trackByte)
+							if (ogTrackByte != trackByte)
 							{
 								// progress of video in menu
-								int videoProgress = 1;
+								char videoProgress[3] = { 1, 1, 1 };
 
 								// keep hitting "down" until video refreshes and sets to zero
-								while (videoProgress != 0)
+								while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
 								{
-									// read to see the new memory
-									ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C48), &videoProgress, sizeof(int), 0);
+									// read to see the new memory, 12 bytes, 3 ints
+									ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C48), &videoProgress[0], sizeof(char), 0); // first int
+									ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C4C), &videoProgress[1], sizeof(char), 0); // next int
+									ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C50), &videoProgress[2], sizeof(char), 0); // next int
 
 									// Hit the 'Down' button on controller
 									WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x20603D), &OneNineOne, sizeof(char), 0);
+									WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x22C58D), &OneNineOne, sizeof(char), 0);
+									WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x99DDA8), &OneNineOne, sizeof(char), 0);
+									WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB18AF8), &OneNineOne, sizeof(char), 0);
+									WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB21630), &OneNineOne, sizeof(char), 0);
 								}
-							}*/
+							}
 						}
 					}
 
@@ -727,6 +733,36 @@ int main(int argc, char **argv)
 							// convert to one byte
 							char lapByte = (char)lapIdFromBuf;
 							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F940), &lapByte, sizeof(lapByte), 0);
+
+							// change the spawn order
+							
+							// Server:   0 1 2 3 4 5 6 7
+							// Client 1: 1 0 2 3 4 5 6 7
+							// Client 2: 1 2 0 3 4 5 6 7
+							// Client 3: 1 2 3 0 4 5 6 7
+
+							// this will change when we have more than 2 players
+							char clientNum = 1;
+
+							// set all positions before client
+							for (char i = 0; i < clientNum; i++)
+							{
+								char value = i + 1;
+								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + i), &value, sizeof(char), 0);
+							}
+
+							// set the client
+							char value = clientNum;
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + clientNum), &value, sizeof(char), 0);
+
+							// set all positions after client
+							for (char i = clientNum + 1; i < 8; i++)
+							{
+								char value = i + 1;
+								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + i), &value, sizeof(char), 0);
+							}
+
+							// Write to memory
 						}
 					}
 

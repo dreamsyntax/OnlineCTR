@@ -620,7 +620,11 @@ int main(int argc, char **argv)
 						NavAddr2 = -1;
 						NavAddr3 = -1;
 
-						printf("Sending to clients: Start Race with X amount of players and Array of characters\n");
+						//printf("Sending to clients: Start Race with X amount of players and Array of characters\n");
+
+						// In the future, rather than sending a message to start with no info,
+						// we will send a message to start, with the number of players, and 
+						// which character each player selected
 
 						// 2 means Start Message
 						memset(sendBuf, 0, BUFFER_SIZE);
@@ -814,7 +818,7 @@ int main(int argc, char **argv)
 
 				if (NavAddr1 == -1)
 				{
-					printf("Fail to find NavAddr1\n");
+					// This will probably never happen
 					continue;
 				}
 

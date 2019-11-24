@@ -742,27 +742,11 @@ int main(int argc, char **argv)
 							// Client 3: 1 2 3 0 4 5 6 7
 
 							// this will change when we have more than 2 players
-							char clientNum = 1;
+							char zero = 0;
 
-							// set all positions before client
-							for (char i = 0; i < clientNum; i++)
-							{
-								char value = i + 1;
-								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + i), &value, sizeof(char), 0);
-							}
-
-							// set the client
-							char value = clientNum;
-							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + clientNum), &value, sizeof(char), 0);
-
-							// set all positions after client
-							for (char i = clientNum + 1; i < 8; i++)
-							{
-								char value = i + 1;
-								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + i), &value, sizeof(char), 0);
-							}
-
-							// Write to memory
+							// This will be fine for now
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 0), &one, sizeof(char), 0);
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 1), &zero, sizeof(char), 0);
 						}
 					}
 
@@ -782,6 +766,9 @@ int main(int argc, char **argv)
 						// Stop looking for messages until later
 					}
 				}
+			
+				// Get the new Track ID
+				ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackID, sizeof(trackID), 0);
 			}
 		}
 
@@ -815,6 +802,8 @@ int main(int argc, char **argv)
 				// max C70 will fail on most tracks
 				min = baseAddress + 0xC30000; 
 				max = baseAddress + 0xC80000; 
+
+				printf("TrackID: %d\n", trackID);
 
 				// Get Start Line Positions
 				for (int i = 0; i < max - min; ) // put nothing in the end

@@ -32,48 +32,48 @@ c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(715): warning C4312: 'ty
 c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(716): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
 c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(731): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
 c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(735): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(751): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(756): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(748): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(749): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(761): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
 c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(762): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(777): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(778): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(795): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(801): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(823): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(824): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(825): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(832): warning C4477: 'printf' : format string '%p' requires an argument of type 'void *', but variadic argument 1 has type 'unsigned long'
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(832): warning C4313: 'printf': '%p' in format string conflicts with argument 1 of type 'unsigned long'
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(866): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(771): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(782): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(788): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(812): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(813): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(814): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(821): warning C4477: 'printf' : format string '%p' requires an argument of type 'void *', but variadic argument 1 has type 'unsigned long'
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(821): warning C4313: 'printf': '%p' in format string conflicts with argument 1 of type 'unsigned long'
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(855): warning C4312: 'type cast': conversion from 'DWORD' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(858): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(859): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(860): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(867): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(868): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
 c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(869): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(870): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(871): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(878): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(879): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(880): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(911): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(918): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(923): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(924): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(925): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(949): warning C4477: 'sscanf' : format string '%d' requires an argument of type 'int *', but variadic argument 2 has type 'short *'
-  c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(949): note: consider using '%hd' in the format string
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(949): warning C4477: 'sscanf' : format string '%d' requires an argument of type 'int *', but variadic argument 3 has type 'short *'
-  c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(949): note: consider using '%hd' in the format string
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(949): warning C4477: 'sscanf' : format string '%d' requires an argument of type 'int *', but variadic argument 4 has type 'short *'
-  c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(949): note: consider using '%hd' in the format string
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(955): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(956): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(957): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(962): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(963): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(964): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(969): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(970): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(971): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(1018): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(1019): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
-c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(1020): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(900): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(907): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(912): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(913): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(914): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(938): warning C4477: 'sscanf' : format string '%d' requires an argument of type 'int *', but variadic argument 2 has type 'short *'
+  c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(938): note: consider using '%hd' in the format string
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(938): warning C4477: 'sscanf' : format string '%d' requires an argument of type 'int *', but variadic argument 3 has type 'short *'
+  c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(938): note: consider using '%hd' in the format string
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(938): warning C4477: 'sscanf' : format string '%d' requires an argument of type 'int *', but variadic argument 4 has type 'short *'
+  c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(938): note: consider using '%hd' in the format string
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(944): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(945): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(946): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(951): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(952): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(953): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(958): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(959): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(960): warning C4312: 'type cast': conversion from 'unsigned int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(1007): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(1008): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
+c:\users\niko\desktop\onlinectr\onlinectr\onlinectr.cpp(1009): warning C4312: 'type cast': conversion from 'int' to 'PBYTE *' of greater size
   Generating code
   1 of 16 functions ( 6.3%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation

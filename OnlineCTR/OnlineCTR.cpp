@@ -742,11 +742,12 @@ int main(int argc, char **argv)
 							// Client 3: 1 2 3 0 4 5 6 7
 
 							// this will change when we have more than 2 players
-							char zero = 0;
+							//char zero = 0;
 
-							// This will be fine for now
-							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 0), &one, sizeof(char), 0);
-							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 1), &zero, sizeof(char), 0);
+							// This spawns players in the right position at starting line,
+							// but then everything else breaks, and we do not know why yet
+							//WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 0), &one, sizeof(char), 0);
+							//WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 1), &zero, sizeof(char), 0);
 						}
 					}
 

@@ -23,3 +23,6 @@ In Track Selection, let the host browse the tracks, the client should not touch 
 
 Let the host start the race, the client should automatically copy the server
 When the race starts, you should only see 2 racers. If you see 8, something went wrong
+
+When the race starts, both players will see themselves in the front-left position.
+Keep that in mind

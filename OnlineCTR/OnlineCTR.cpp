@@ -800,8 +800,10 @@ int main(int argc, char **argv)
 
 				// min C40 will fail on coco park
 				// max C70 will fail on most tracks
-				min = baseAddress + 0xC30000; 
-				max = baseAddress + 0xC80000; 
+
+				// Should be fine C3 - C8, but just to be safe...
+				min = baseAddress + 0xC00000; 
+				max = baseAddress + 0xD00000; 
 
 				printf("TrackID: %d\n", trackID);
 
@@ -908,22 +910,27 @@ int main(int argc, char **argv)
 				}
 
 				// Get Player 1 position
-				unsigned int data[3];
-				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x0), &data[0], sizeof(int), 0);
-				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x4), &data[1], sizeof(int), 0);
-				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x8), &data[2], sizeof(int), 0);
+				// All players have 12-byte positions (4x3). 
+				// Changing those coordinates will not move
+				// the players. 
+				unsigned int rawPosition[3];
+				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x0), &rawPosition[0], sizeof(int), 0);
+				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x4), &rawPosition[1], sizeof(int), 0);
+				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x8), &rawPosition[2], sizeof(int), 0);
 
-				// Divide by 256
-				short data2[3];
-				data2[0] = data[0] / 256;
-				data2[1] = data[1] / 256;
-				data2[2] = data[2] / 256;
+				// Divide by 256, bit shifting reduces bytes
+				// from 4 bytes to 2 bytes. This will be the
+				// coordinate system that we set players to.
+				short compressPos[3];
+				compressPos[0] = rawPosition[0] / 256;
+				compressPos[1] = rawPosition[1] / 256;
+				compressPos[2] = rawPosition[2] / 256;
 
 				// Server sends to client
 				// Client sends to server
 				// 3 means Position Message
 				memset(sendBuf, 0, BUFFER_SIZE);
-				sendLength = sprintf(sendBuf, "3 %d %d %d", data2[0], data2[1], data2[2]);
+				sendLength = sprintf(sendBuf, "3 %d %d %d", compressPos[0], compressPos[1], compressPos[2]);
 
 				// Server gets from client
 				// Client gets from server
@@ -935,29 +942,42 @@ int main(int argc, char **argv)
 					// 3 means Position Message
 					if (messageID == 3)
 					{
-						if (sscanf(recvBuf, "%d %d %d %d", &messageID, &data2[0], &data2[1], &data2[2]) == 4)
-						{
-							printf("%d %d %d\n", data2[0], data2[1], data2[2]);
+						// This holds the position you get from network
+						short netPos[3];
 
+						// Get online player's position from the network message
+						if (sscanf(recvBuf, "%d %d %d %d", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
+						{
+							// print the position we got
+							printf("%d %d %d\n", netPos[0], netPos[1], netPos[2]);
+
+							// Changing the 12-byte positions will not move players
+
+							// Changing these values will move players, 
+							// That is just how CTR was programmed in 1999
+
+							// set all nodes on path 1
 							for (int i = 0; i < numNodesInPaths[3 * trackID + 0]; i++)
 							{
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 0), &data2[0], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 2), &data2[1], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 4), &data2[2], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 0), &netPos[0], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 2), &netPos[1], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 4), &netPos[2], 2, 0);
 							}
 
+							// set all nodes on path 2
 							for (int i = 0; i < numNodesInPaths[3 * trackID + 1]; i++)
 							{
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 0), &data2[0], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 2), &data2[1], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 4), &data2[2], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 0), &netPos[0], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 2), &netPos[1], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 4), &netPos[2], 2, 0);
 							}
 
+							// set all nodes on path 3
 							for (int i = 0; i < numNodesInPaths[3 * trackID + 2]; i++)
 							{
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 0), &data2[0], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 2), &data2[1], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 4), &data2[2], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 0), &netPos[0], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 2), &netPos[1], 2, 0);
+								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 4), &netPos[2], 2, 0);
 							}
 						}
 					}

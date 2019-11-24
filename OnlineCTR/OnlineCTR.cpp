@@ -94,61 +94,62 @@ uintptr_t GetModuleBaseAddress(DWORD procId, const wchar_t* modName)
 	return modBaseAddr;
 }
 
-unsigned int P1_StartPos[18 * 3] =
+// First nav pos of each track
+short PosNav1[18 * 3] =
 {
 	// Crash Cove
-	4294801664, 193792, 4293823744,
+	62531, 677, 60843,
 
 	// Roos Tubes
-	4294893056, 2816, 447744,
+	64988, 0, 65479,
 
 	// Tiger Temple
-	4293429504, 1536, 4294644480,
+	56370, 64588, 61307,
 
 	// Coco Park
-	61184, 45568, 4293474560,
+	62758, 72, 60002,
 
 	// Mystery Caves
-	264192, 15360, 3618560,
+	2053, 61, 12199,
 
 	// Blizzard Bluff
-	4294601984, 91648, 76800,
+	62558, 445, 372,
 
 	// Sewer Speedway
-	4294836992, 0, 75008,
+	63014, 1, 368,
 
 	// Dingo Canyon
-	126208, 589312, 224512,
+	389, 2328, 62437,
 
 	// Papu Pyramid
-	343552, 4294922240, 4293427200,
+	2567, 65406, 60578,
 
 	// Dragon Mines
-	26112, 353792, 802304,
+	154, 1145, 1635,
 
 	// Polar Pass
-	404992, 23808, 4294895360,
+	3660, 118, 65000,
 
 	// Cortex Castle
-	820480, 0, 1644800,
+	712, 1, 6715,
 
 	// Tiny Arena
-	4293426176, 4294965760, 211712,
+	56519, 6, 1242,
 
 	// Hot Air Skyway
-	67328, 0, 4294895360,
+	3327, 103, 64876,
 
 	// N Gin Labs
-	2918400, 0, 905984,
+	14009, 0, 3354,
 
 	// Oxide Station
-	1512192, 3840, 672512,
+	7430, 308, 4665,
 
 	// Slide Coliseum
-	429824, 0, 4292237056,
+	65370, 1, 55053,
 
 	// Turbo Track
-	1260800, 5888, 881664
+	5666, 8, 2259,
 };
 
 // the number of nodes in each path
@@ -333,10 +334,6 @@ unsigned int P1xAddr = -1;
 unsigned int NavAddr1 = -1;
 unsigned int NavAddr2 = -1;
 unsigned int NavAddr3 = -1;
-
-// AI[n]x = P1x - 0x354 - 0x670 * n
-// where n = 0 - 6 (for positions 2 - 8)
-unsigned int StartLinePos[8][3]; 
 
 // ID[0] is the server's character
 short characterIDs[8];
@@ -742,12 +739,12 @@ int main(int argc, char **argv)
 							// Client 3: 1 2 3 0 4 5 6 7
 
 							// this will change when we have more than 2 players
-							//char zero = 0;
+							char zero = 0;
 
-							// This spawns players in the right position at starting line,
-							// but then everything else breaks, and we do not know why yet
-							//WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 0), &one, sizeof(char), 0);
-							//WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 1), &zero, sizeof(char), 0);
+							// Change the spawn order (look at comments above)
+							// With only two players, this should be fine for now
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 0), &one, sizeof(char), 0);
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 1), &zero, sizeof(char), 0);
 						}
 					}
 
@@ -791,45 +788,33 @@ int main(int argc, char **argv)
 			// This only happens when loading ends before race, no more bugs
 			if (gameStatePrev == 2 && gameStateCurr == 10 && P1xAddr == -1)
 			{
-				printf("First frame of intro cutscene\n");
+				//printf("First frame of intro cutscene\n");
 
-				int min = 0;
-				int max = 0;
-
-				// However, P1xAddr needs 81920 iterations.
-				// Scanning for Path1 requires 96054 iterations.
-
-				// min C40 will fail on coco park
-				// max C70 will fail on most tracks
-
-				// Should be fine C3 - C8, but just to be safe...
-				min = baseAddress + 0xC00000; 
-				max = baseAddress + 0xD00000; 
-
-				printf("TrackID: %d\n", trackID);
+				// NavAddr1 must fall between these addresses
+				int min = baseAddress + 0xC20000;
+				int max = baseAddress + 0xC70000;
 
 				// Get Start Line Positions
 				for (int i = 0; i < max - min; ) // put nothing in the end
 				{
-					int dataInt[3];
-					ReadProcessMemory(handle, (PBYTE*)(min + i + 0x0), &dataInt[0], sizeof(int), 0);
-					ReadProcessMemory(handle, (PBYTE*)(min + i + 0x4), &dataInt[1], sizeof(int), 0);
-					ReadProcessMemory(handle, (PBYTE*)(min + i + 0x8), &dataInt[2], sizeof(int), 0);
+					short dataShort[3];
+					ReadProcessMemory(handle, (PBYTE*)(min + i + 0x0), &dataShort[0], sizeof(short), 0);
+					ReadProcessMemory(handle, (PBYTE*)(min + i + 0x2), &dataShort[1], sizeof(short), 0);
+					ReadProcessMemory(handle, (PBYTE*)(min + i + 0x4), &dataShort[2], sizeof(short), 0);
 
-					if (dataInt[0] == P1_StartPos[3 * trackID + 0])
-						if (dataInt[1] == P1_StartPos[3 * trackID + 1])
-							if (dataInt[2] == P1_StartPos[3 * trackID + 2])
+					if (dataShort[0] == PosNav1[3 * trackID + 0])
+						if (dataShort[1] == PosNav1[3 * trackID + 1])
+							if (dataShort[2] == PosNav1[3 * trackID + 2])
 							{
-								P1xAddr = min + i;
-								printf("Found P1xAddr: %p\n", P1xAddr - baseAddress);
+								NavAddr1 = min + i;
 								break;
 							}
-					i += 4;
+					i += 2;
 				}
 
-				if (P1xAddr == -1)
+				if (NavAddr1 == -1)
 				{
-					printf("Fail to find P1xAddr\n");
+					printf("Fail to find NavAddr1\n");
 					continue;
 				}
 
@@ -840,10 +825,11 @@ int main(int argc, char **argv)
 					numNodesInPaths[3 * trackID + 2];
 
 				// get the nav addresses
-				NavAddr1 = P1xAddr - totalPoints * 20 - 63200;
 				NavAddr2 = NavAddr1 + numNodesInPaths[3 * trackID + 0] * 20 + 0x60;
 				NavAddr3 = NavAddr2 + numNodesInPaths[3 * trackID + 1] * 20 + 0x60;
 
+				// Address of X position of Player 1
+				P1xAddr = NavAddr1 + totalPoints * 20 + 63200;
 
 				// if you're the client
 				if (0)
@@ -856,22 +842,6 @@ int main(int argc, char **argv)
 				// Set Text
 				unsigned char title[] = "Online";
 				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3EC79), &title, 6, 0);
-
-				// Read the original location of player 1
-				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0), &StartLinePos[0][0], sizeof(int), 0);
-				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 4), &StartLinePos[0][1], sizeof(int), 0);
-				ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 8), &StartLinePos[0][2], sizeof(int), 0);
-				printf("1: %u %u %u\n", StartLinePos[0][0], StartLinePos[0][1], StartLinePos[0][2]);
-
-				// Read the original location of player 2-8
-				for (int i = 0; i < 7; i++)
-				{
-					// AI[n]x = P1x - 0x354 - 0x670 * n
-					ReadProcessMemory(handle, (PBYTE*)(P1xAddr - 0x354 - 0x670 * i + 0), &StartLinePos[i + 1][0], sizeof(int), 0);
-					ReadProcessMemory(handle, (PBYTE*)(P1xAddr - 0x354 - 0x670 * i + 4), &StartLinePos[i + 1][1], sizeof(int), 0);
-					ReadProcessMemory(handle, (PBYTE*)(P1xAddr - 0x354 - 0x670 * i + 8), &StartLinePos[i + 1][2], sizeof(int), 0);
-					printf("%d: %u %u %u\n", i + 2, StartLinePos[i + 1][0], StartLinePos[i + 1][1], StartLinePos[i + 1][2]);
-				}
 
 				inRace = true;
 			}
@@ -949,9 +919,6 @@ int main(int argc, char **argv)
 						// Get online player's position from the network message
 						if (sscanf(recvBuf, "%d %d %d %d", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
 						{
-							// print the position we got
-							printf("%d %d %d\n", netPos[0], netPos[1], netPos[2]);
-
 							// Changing the 12-byte positions will not move players
 
 							// Changing these values will move players, 
@@ -1025,14 +992,13 @@ int main(int argc, char **argv)
 					int Gone = 99999999;
 					int aiX = P1xAddr - 0x354 - 0x670 * i;
 
+					// Teleport them all under the track.
+					// You can try changing X and Z, but they'll just warp back to spawn.
+					// Only height goes into effect, which is all we need.
 					WriteProcessMemory(handle, (PBYTE*)(aiX + 0), &Gone, sizeof(int), 0);
 					WriteProcessMemory(handle, (PBYTE*)(aiX + 4), &Gone, sizeof(int), 0);
 					WriteProcessMemory(handle, (PBYTE*)(aiX + 8), &Gone, sizeof(int), 0);
 				}
-
-				// read all positions from all clients
-				// send all positions to all clients
-				// write positions to the emulator
 			}
 		}
 		

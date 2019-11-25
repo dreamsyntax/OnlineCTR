@@ -171,7 +171,7 @@ short PosNav1[25 * 3] =
 
 // the number of nodes in each path
 // there are 3 paths on each track
-short numNodesInPaths[18 * 3] =
+short numNodesInPaths[25 * 3] =
 {
 	// Crash Cove Path 1
 	227,
@@ -334,6 +334,43 @@ short numNodesInPaths[18 * 3] =
 
 	// Turbo Track Path 3
 	341,
+
+	// ============ WIP ===========
+
+	// Nitro Court Path 1
+	0,
+
+	// Nitro Court Path 2
+	0,
+
+	// Nitro Court Path 3
+	0,
+
+	// Rampage Ruins Path 1
+	0,
+
+	// Rampage Ruins Path 2
+	0,
+
+	// Rampage Ruins Path 3
+	0,
+
+	// Parking Lot Path 1
+	196,
+
+	// Parking Lot Path 2
+	98,
+
+	// Parking Lot Path 3
+	124,
+
+	// Skull Rock
+
+	// North Bowl
+
+	// Rocky Road
+
+	// Lab Basement
 };
 
 unsigned char gameStatePrev; // 0x161A871
@@ -629,6 +666,12 @@ int main(int argc, char **argv)
 				// if lap selector is closed
 				if (!lapRowSelectorOpen)
 				{
+					if (GetAsyncKeyState(VK_F9))
+					{
+						char _25 = 25;
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &_25, sizeof(_25), 0);
+					}
+
 					// Get Track ID, send it to clients
 					ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackID, sizeof(trackID), 0);
 
@@ -878,10 +921,6 @@ int main(int argc, char **argv)
 
 				// Address of X position of Player 1
 				P1xAddr = NavAddr1 + totalPoints * 20 + 63200;
-
-				// if you're in a battle map
-				if (trackID > 17)
-					P1xAddr += 0x2084;
 
 				printf("P1xAddr: %p\n", P1xAddr);
 

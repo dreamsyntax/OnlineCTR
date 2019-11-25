@@ -95,7 +95,7 @@ uintptr_t GetModuleBaseAddress(DWORD procId, const wchar_t* modName)
 }
 
 // First nav pos of each track
-short PosNav1[18 * 3] =
+short PosNav1[25 * 3] =
 {
 	// Crash Cove
 	62531, 677, 60843,
@@ -150,6 +150,23 @@ short PosNav1[18 * 3] =
 
 	// Turbo Track
 	5666, 8, 2259,
+
+	// Nitro Court
+	368, 0, 392,
+
+	// Rampage Ruins
+	60103, 447, 63985,
+
+	// Parking Lot
+	65392, 1, 442,
+
+	// Skull Rock
+
+	// North Bowl
+
+	// Rocky Road
+
+	// Lab Basement
 };
 
 // the number of nodes in each path
@@ -342,6 +359,25 @@ bool inRace = false; // in client
 
 int main(int argc, char **argv)
 {
+	union
+	{
+		short x[3];
+		unsigned char y[6];
+	} x;
+
+	//-144, 1, 442
+
+	x.x[0] = -144;
+	x.x[1] = 1; 
+	x.x[2] = 442;
+
+	printf("%hu, %hu, %hu\n", x.x[0], x.x[1], x.x[2]);
+
+	for(int i = 0; i < 6; i++)
+		printf("%d ", x.y[i]);
+
+	printf("\n");
+
 	/*struct
 	{
 		short a;
@@ -798,6 +834,13 @@ int main(int argc, char **argv)
 				int min = baseAddress + 0xC20000;
 				int max = baseAddress + 0xC70000;
 
+				// battle tracks
+				if (trackID > 17)
+				{
+					min = baseAddress + 0xBFCDF4 - 0x50000;
+					max = baseAddress + 0xBFCDF4 + 0x50000;
+				}
+
 				// Get Start Line Positions
 				for (int i = 0; i < max - min; ) // put nothing in the end
 				{
@@ -811,6 +854,7 @@ int main(int argc, char **argv)
 							if (dataShort[2] == PosNav1[3 * trackID + 2])
 							{
 								NavAddr1 = min + i;
+								printf("Found NavAddr1: %p\n", min + i);
 								break;
 							}
 					i += 2;
@@ -834,6 +878,12 @@ int main(int argc, char **argv)
 
 				// Address of X position of Player 1
 				P1xAddr = NavAddr1 + totalPoints * 20 + 63200;
+
+				// if you're in a battle map
+				if (trackID > 17)
+					P1xAddr += 0x2084;
+
+				printf("P1xAddr: %p\n", P1xAddr);
 
 				// if you're the client
 				if (0)

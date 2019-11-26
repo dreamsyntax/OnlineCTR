@@ -161,12 +161,16 @@ short PosNav1[25 * 3] =
 	65392, 1, 442,
 
 	// Skull Rock
+	63334, 47, 1837,
 
 	// North Bowl
+	51, 1, 64764,
 
 	// Rocky Road
+	393, 767, 64128,
 
 	// Lab Basement
+	1232, 1, 4610,
 };
 
 // the number of nodes in each path
@@ -347,13 +351,13 @@ short numNodesInPaths[25 * 3] =
 	0,
 
 	// Rampage Ruins Path 1
-	0,
+	140,
 
 	// Rampage Ruins Path 2
-	0,
+	187,
 
 	// Rampage Ruins Path 3
-	0,
+	169,
 
 	// Parking Lot Path 1
 	196,
@@ -364,13 +368,41 @@ short numNodesInPaths[25 * 3] =
 	// Parking Lot Path 3
 	124,
 
-	// Skull Rock
+	// Skull Rock Path 1
+	102,
 
-	// North Bowl
+	// Skull Rock Path 2
+	79,
 
-	// Rocky Road
+	// Skull Rock Path 3
+	197,
 
-	// Lab Basement
+	// North Bowl Path 1
+	127,
+
+	// North Bowl Path 2
+	175,
+
+	// North Bowl Path 3
+	204,
+
+	// Rocky Road Path 1
+	107,
+
+	// Rocky Road Path 2
+	70,
+
+	// Rocky Road Path 3
+	126,
+
+	// Lab Basement Path 1
+	101,
+
+	// Lab Basement Path 2
+	65,
+
+	// Lab Basement Path 3
+	64,
 };
 
 unsigned char gameStatePrev; // 0x161A871
@@ -396,44 +428,22 @@ bool inRace = false; // in client
 
 int main(int argc, char **argv)
 {
-	union
+	/*union
 	{
 		short x[3];
 		unsigned char y[6];
 	} x;
 
-	//-144, 1, 442
+	// 393, 767, -1408
 
-	x.x[0] = -144;
-	x.x[1] = 1; 
-	x.x[2] = 442;
+	x.x[0] = 393;
+	x.x[1] = 767;
+	x.x[2] = -1408;
 
 	printf("%hu, %hu, %hu\n", x.x[0], x.x[1], x.x[2]);
+	for(int i = 0; i < 6; i++)printf("%d ", x.y[i]);
 
-	for(int i = 0; i < 6; i++)
-		printf("%d ", x.y[i]);
-
-	printf("\n");
-
-	/*struct
-	{
-		short a;
-		short b;
-		short c;
-	}z;
-
-	// X Y Z of first nav point
-	z.a = -548;
-	z.b = 0;
-	z.c = -57;
-
-	unsigned char x[6];
-	memcpy(x, &z, 6);
-	for (int i = 0; i < 6; i++)
-		printf("%02X ", x[i]);
-
-	printf("\n");
-	system("pause");*/
+	printf("\n");*/
 
 	//=======================================================================
 
@@ -442,7 +452,7 @@ int main(int argc, char **argv)
 	DWORD procID = GetProcId();
 	DWORD baseAddress = GetModuleBaseAddress(procID, L"ePSXe.exe");
 
-	printf("%08X\n", baseAddress);
+	//printf("%08X\n", baseAddress);
 
 	if (!procID)
 	{
@@ -880,8 +890,8 @@ int main(int argc, char **argv)
 				// battle tracks
 				if (trackID > 17)
 				{
-					min = baseAddress + 0xBFCDF4 - 0x50000;
-					max = baseAddress + 0xBFCDF4 + 0x50000;
+					min = baseAddress + 0xBE0000;
+					max = baseAddress + 0xC00000;
 				}
 
 				// Get Start Line Positions
@@ -897,7 +907,7 @@ int main(int argc, char **argv)
 							if (dataShort[2] == PosNav1[3 * trackID + 2])
 							{
 								NavAddr1 = min + i;
-								printf("Found NavAddr1: %p\n", min + i);
+								printf("NavAddr1: %p\n", min + i);
 								break;
 							}
 					i += 2;
@@ -906,6 +916,7 @@ int main(int argc, char **argv)
 				if (NavAddr1 == -1)
 				{
 					// This will probably never happen
+					printf("Failed to find NavAddr1\n");
 					continue;
 				}
 
@@ -921,8 +932,6 @@ int main(int argc, char **argv)
 
 				// Address of X position of Player 1
 				P1xAddr = NavAddr1 + totalPoints * 20 + 63200;
-
-				printf("P1xAddr: %p\n", P1xAddr);
 
 				// if you're the client
 				if (0)

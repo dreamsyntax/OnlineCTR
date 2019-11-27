@@ -15,6 +15,10 @@ unsigned short MAX_CONNECTIONS;
 
 bool isServer = false;
 bool isClient = false;
+bool inRace = false;
+
+bool pressingF9 = false;
+bool pressingF10 = false;
 
 const char *host;
 char*    serverName;
@@ -424,7 +428,18 @@ unsigned int NavAddr3 = -1;
 // ID[0] is the server's character
 short characterIDs[8];
 
-bool inRace = false; // in client
+// copied from here 
+// https://stackoverflow.com/questions/5891811/generate-random-number-between-1-and-3-in-c
+int roll(int min, int max)
+{
+	// x is in [0,1[
+	double x = rand() / static_cast<double>(RAND_MAX + 1);
+
+	// [0,1[ * (max - min) + min is in [min,max[
+	int that = min + static_cast<int>(x * (max - min));
+
+	return that;
+}
 
 int main(int argc, char **argv)
 {
@@ -447,6 +462,8 @@ int main(int argc, char **argv)
 
 	//=======================================================================
 
+	// Initialize random number generator
+	srand(time(NULL));
 
 	// Open the ePSXe.exe process
 	DWORD procID = GetProcId();
@@ -676,10 +693,66 @@ int main(int argc, char **argv)
 				// if lap selector is closed
 				if (!lapRowSelectorOpen)
 				{
-					if (GetAsyncKeyState(VK_F9))
+					// There are better ways to do input,
+					// but it doesn't need to be perfect, it just needs to work
+					if (!GetAsyncKeyState(VK_F9)) pressingF9 = false;
+
+					// Enable Battle Tracks in Arcade
+					if (GetAsyncKeyState(VK_F9) && !pressingF9)
 					{
+						pressingF9 = true;
+
 						char _25 = 25;
 						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &_25, sizeof(_25), 0);
+					}
+
+					// There are better ways to do input,
+					// but it doesn't need to be perfect, it just needs to work
+					if (!GetAsyncKeyState(VK_F10)) pressingF10 = false;
+
+					// Choose Random Track if you can't decide
+					if (GetAsyncKeyState(VK_F10) && !pressingF10)
+					{
+						pressingF10 = true;
+
+						// get random track
+						char trackByte = (char)roll(0, 17);
+
+						// variable to hit the Down button
+						char OneNineOne = 191;
+
+						// set Text+Map address 
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackByte, sizeof(char), 0);
+
+						// set Video Address
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379C8), &trackByte, sizeof(char), 0);
+
+						// progress of video in menu
+						char videoProgress[3] = { 1, 1, 1 };
+
+						// keep hitting "down" until video refreshes and sets to zero
+						while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
+						{
+							// read to see the new memory, 12 bytes, 3 ints
+							ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C48), &videoProgress[0], sizeof(char), 0); // first int
+							ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C4C), &videoProgress[1], sizeof(char), 0); // next int
+							ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C50), &videoProgress[2], sizeof(char), 0); // next int
+
+							// Hit the 'Down' button on controller
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x20603D), &OneNineOne, sizeof(char), 0);
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x22C58D), &OneNineOne, sizeof(char), 0);
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x99DDA8), &OneNineOne, sizeof(char), 0);
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB18AF8), &OneNineOne, sizeof(char), 0);
+							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB21630), &OneNineOne, sizeof(char), 0);
+						}
+
+						// Not sure if I want the "random track" button to automatically open
+						// the lapRowSelector or not, but if we ever want it, here is the code
+
+						// open the lapRowSelector
+						//char one = 1;
+						//WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &one, sizeof(char), 0);
+
 					}
 
 					// Get Track ID, send it to clients
@@ -695,6 +768,7 @@ int main(int argc, char **argv)
 				// if lap selector is open
 				else
 				{
+					// These determine if the loading screen has triggered yet
 					unsigned char menuA = 0;
 					unsigned char menuB = 0;
 					ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CE), &menuA, sizeof(menuA), 0);
@@ -779,12 +853,7 @@ int main(int argc, char **argv)
 							// set Video Address
 							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379C8), &trackByte, sizeof(char), 0);
 
-							// This is an attempt to update the video
-							// in the track-selection menu. It currently
-							// does not work, just ignore it for now
-
-							// This does not work
-							// Come back to it
+							// Spam the down button to update video, after selected-track changes
 							if (ogTrackByte != trackByte)
 							{
 								// progress of video in menu

@@ -672,6 +672,15 @@ int main(int argc, char **argv)
 		unsigned long long value = 18446744073709551615;
 		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1070C), &value, sizeof(value), 0);
 
+		// Play as Oxide if you press F11
+		// works on server and client
+		if (GetAsyncKeyState(VK_F11))
+		{
+			// set character ID to 15
+			char _15 = 15;
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &_15, sizeof(_15), 0);
+		}
+
 		// Get characterID for this player
 		// for characters 0 - 7:
 		// CharacterID[i] : 0x1608EA4 + 2 * i
@@ -757,8 +766,6 @@ int main(int argc, char **argv)
 
 					// Get Track ID, send it to clients
 					ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackID, sizeof(trackID), 0);
-
-					//printf("Sending to clients: Track %d\n", trackID);
 
 					// 0 means Track Message
 					memset(sendBuf, 0, BUFFER_SIZE);
@@ -935,11 +942,49 @@ int main(int argc, char **argv)
 		// if you're not in the track selection menu
 		else
 		{
-			// set all characters
+			// put network characters into RAM
 			for (int i = 1; i < 2; i++)
 			{
 				char oneByte = (char)characterIDs[i];
 				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2*i), &oneByte, 1, 0); // 4, for 2 shorts
+			}
+
+			// Set LOD to 1 by default
+			char _1 = 1;
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_1, sizeof(_1), 0);
+
+			// if network player is using someone
+			// who is an unlockable character,
+			// not part of original 8
+			if (characterIDs[1] > 7)
+			{
+				// Drop LOD to 3
+				char _3 = 3;
+				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_3, sizeof(_3), 0);
+			}
+
+			// If the net player is an original player, 
+			// then choose if LOD should drop depending on Oxide
+			else
+			{
+				// if you are playing as Oxide
+				if (characterIDs[0] == 15)
+				{
+					// if you're choosing a track where LOD needs to drop
+					if (
+						trackID == 4 ||	// Mystery Caves
+						trackID == 10 ||// Polar Pass
+						trackID == 11 ||// Cortex Castle
+						trackID == 13 ||// Hot Air Skyway
+						trackID == 14 ||// N Gin Labs
+						trackID == 15	// Oxide Station
+						)
+					{
+						// Set LOD to 2
+						char _2 = 2;
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_2, sizeof(_2), 0);
+					}
+				}
 			}
 
 			// GameState
@@ -1036,112 +1081,6 @@ int main(int argc, char **argv)
 						// set the countdown traffic-lights to 4000
 						// Addresss = 0x161A84C, 2 bytes large
 					}
-				}
-
-				// Left column
-				if (GetAsyncKeyState(VK_F11))
-				{
-					printf("F11\n");
-
-					unsigned char _0 = 0;
-					unsigned char _1 = 1;
-					unsigned char _88 = 88;
-					unsigned char _225 = 225;
-					unsigned char _200 = 200;
-					unsigned char _231 = 231;
-					unsigned char _208 = 208;
-					unsigned char _30 = 30;
-					unsigned char _128 = 128;
-
-					// one byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABEF99), &_1, 1, 0);
-
-					// one byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABEF9D), &_0, 1, 0);
-
-					// Two byte value
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB18), &_88, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB19), &_225, 1, 0);
-
-					// Two byte value
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB1C), &_200, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB1D), &_231, 1, 0);
-
-					// Two byte value
-					WriteProcessMemory(handle, (PBYTE*)(0x1C20184), &_208, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C20185), &_208, 1, 0);
-
-					// one byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1C20198), &_0, 1, 0);
-
-					// Eight byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207E8), &_0, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207E9), &_0, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EA), &_0, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EB), &_0, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EC), &_88, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207ED), &_225, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EE), &_30, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EF), &_128, 1, 0);
-
-					// one byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1C21B58), &_1, 1, 0);
-				}
-
-				// Right column
-				if (GetAsyncKeyState(VK_F12))
-				{
-					printf("F12\n");
-
-					unsigned char _0 = 0;
-					unsigned char _1 = 1;
-					unsigned char _88 = 88;
-					unsigned char _225 = 225;
-					unsigned char _200 = 200;
-					unsigned char _231 = 231;
-					unsigned char _208 = 208;
-					unsigned char _30 = 30;
-					unsigned char _128 = 128;
-
-
-					unsigned char _24 = 24;
-					unsigned char _251 = 251;
-					unsigned char _236 = 236;
-					unsigned char _226 = 226;
-
-					// one byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABEF99), &_0, 1, 0);
-
-					// one byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABEF9D), &_1, 1, 0);
-
-					// Two byte value
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB18), &_200, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB19), &_231, 1, 0);
-
-					// Two byte value
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB1C), &_24, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB1D), &_251, 1, 0);
-
-					// Two byte value
-					WriteProcessMemory(handle, (PBYTE*)(0x1C20184), &_236, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C20185), &_226, 1, 0);
-
-					// one byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1C20198), &_1, 1, 0);
-
-					// Eight byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207E8), &_24, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207E9), &_251, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EA), &_30, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EB), &_128, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EC), &_0, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207ED), &_0, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EE), &_0, 1, 0);
-					WriteProcessMemory(handle, (PBYTE*)(0x1C207EF), &_0, 1, 0);
-
-					// one byte
-					WriteProcessMemory(handle, (PBYTE*)(0x1C21B58), &_0, 1, 0);
 				}
 
 				/*

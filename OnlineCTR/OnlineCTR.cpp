@@ -942,10 +942,18 @@ int main(int argc, char **argv)
 				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2*i), &oneByte, 1, 0); // 4, for 2 shorts
 			}
 
+			// GameState
+			// 2 = loading screen
+			// 10 = some menus, intro of race (including traffic lights)
+			// 11 = racing
+
 			gameStatePrev = gameStateCurr;
 
 			// Read gameStateCurr
 			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A871), &gameStateCurr, sizeof(gameStateCurr), 0);
+
+			// when player is in the menu, reset inRace to false
+			if (gameStateCurr == 2) inRace = false;
 
 			// This only happens when loading ends before race, no more bugs
 			if (gameStatePrev == 2 && gameStateCurr == 10 && P1xAddr == -1)
@@ -1030,6 +1038,112 @@ int main(int argc, char **argv)
 					}
 				}
 
+				// Left column
+				if (GetAsyncKeyState(VK_F11))
+				{
+					printf("F11\n");
+
+					unsigned char _0 = 0;
+					unsigned char _1 = 1;
+					unsigned char _88 = 88;
+					unsigned char _225 = 225;
+					unsigned char _200 = 200;
+					unsigned char _231 = 231;
+					unsigned char _208 = 208;
+					unsigned char _30 = 30;
+					unsigned char _128 = 128;
+
+					// one byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABEF99), &_1, 1, 0);
+
+					// one byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABEF9D), &_0, 1, 0);
+
+					// Two byte value
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB18), &_88, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB19), &_225, 1, 0);
+
+					// Two byte value
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB1C), &_200, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB1D), &_231, 1, 0);
+
+					// Two byte value
+					WriteProcessMemory(handle, (PBYTE*)(0x1C20184), &_208, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C20185), &_208, 1, 0);
+
+					// one byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1C20198), &_0, 1, 0);
+
+					// Eight byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207E8), &_0, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207E9), &_0, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EA), &_0, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EB), &_0, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EC), &_88, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207ED), &_225, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EE), &_30, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EF), &_128, 1, 0);
+
+					// one byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1C21B58), &_1, 1, 0);
+				}
+
+				// Right column
+				if (GetAsyncKeyState(VK_F12))
+				{
+					printf("F12\n");
+
+					unsigned char _0 = 0;
+					unsigned char _1 = 1;
+					unsigned char _88 = 88;
+					unsigned char _225 = 225;
+					unsigned char _200 = 200;
+					unsigned char _231 = 231;
+					unsigned char _208 = 208;
+					unsigned char _30 = 30;
+					unsigned char _128 = 128;
+
+
+					unsigned char _24 = 24;
+					unsigned char _251 = 251;
+					unsigned char _236 = 236;
+					unsigned char _226 = 226;
+
+					// one byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABEF99), &_0, 1, 0);
+
+					// one byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABEF9D), &_1, 1, 0);
+
+					// Two byte value
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB18), &_200, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB19), &_231, 1, 0);
+
+					// Two byte value
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB1C), &_24, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1ABFB1D), &_251, 1, 0);
+
+					// Two byte value
+					WriteProcessMemory(handle, (PBYTE*)(0x1C20184), &_236, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C20185), &_226, 1, 0);
+
+					// one byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1C20198), &_1, 1, 0);
+
+					// Eight byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207E8), &_24, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207E9), &_251, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EA), &_30, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EB), &_128, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EC), &_0, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207ED), &_0, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EE), &_0, 1, 0);
+					WriteProcessMemory(handle, (PBYTE*)(0x1C207EF), &_0, 1, 0);
+
+					// one byte
+					WriteProcessMemory(handle, (PBYTE*)(0x1C21B58), &_0, 1, 0);
+				}
+
 				/*
 					Player 1:
 					rotX = posX + 0x96 (only for P1)
@@ -1095,45 +1209,61 @@ int main(int argc, char **argv)
 							// Changing these values will move players, 
 							// That is just how CTR was programmed in 1999
 
+							// we want to move the first AI in the array of AIs (index = 0)
+							int aiNumber = 0;
+
+							// AI[n]x = P1x - 0x354 - 0x670 * n
+							int aiX = P1xAddr - 0x354 - 0x670 * aiNumber;
+
+							// which Path is the AI on
+							char pathByte = 0;
+
+							// Set the Path value to 0
+							// By restricting the AI to one path, there
+							// are less NAV points that need to be set
+							ReadProcessMemory(handle, (PBYTE*)(aiX - 0x38), &pathByte, sizeof(pathByte), 0);
+
+							// The next 50 lines are a rough-draft
+							// It can be consolidated by looping through
+							// all 3 paths, I will do that later though
+
+							printf("Path Number: %d\n", (int)pathByte);
+
 							// set all nodes on path 1
-							for (int i = 0; i < numNodesInPaths[3 * trackID + 0]; i++)
+							if (pathByte == 0)
 							{
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 0), &netPos[0], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 2), &netPos[1], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 4), &netPos[2], 2, 0);
+								for (int i = 0; i < numNodesInPaths[3 * trackID + 0]; i++)
+								{
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 0), &netPos[0], 2, 0);
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 2), &netPos[1], 2, 0);
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr1 + (i * 0x14) + 4), &netPos[2], 2, 0);
+								}
 							}
 
 							// set all nodes on path 2
-							for (int i = 0; i < numNodesInPaths[3 * trackID + 1]; i++)
+							if (pathByte == 1)
 							{
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 0), &netPos[0], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 2), &netPos[1], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 4), &netPos[2], 2, 0);
+								for (int i = 0; i < numNodesInPaths[3 * trackID + 1]; i++)
+								{
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 0), &netPos[0], 2, 0);
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 2), &netPos[1], 2, 0);
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr2 + (i * 0x14) + 4), &netPos[2], 2, 0);
+								}
 							}
 
 							// set all nodes on path 3
-							for (int i = 0; i < numNodesInPaths[3 * trackID + 2]; i++)
+							if (pathByte == 2)
 							{
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 0), &netPos[0], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 2), &netPos[1], 2, 0);
-								WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 4), &netPos[2], 2, 0);
+								for (int i = 0; i < numNodesInPaths[3 * trackID + 2]; i++)
+								{
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 0), &netPos[0], 2, 0);
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 2), &netPos[1], 2, 0);
+									WriteProcessMemory(handle, (PBYTE*)(NavAddr3 + (i * 0x14) + 4), &netPos[2], 2, 0);
+								}
 							}
 						}
 					}
 				}
-
-				// Set all players
-				for (int i = 0; i < 1; i++)
-				{
-					// AI[n]x = P1x - 0x354 - 0x670 * n
-					int aiX = P1xAddr - 0x354 - 0x670 * i;
-
-					// Set the Nav ID of the player
-					// Do not know how yet
-				}
-
-				// Don't teleport AI #0 to oblivion, we want
-				// that player to be on the track
 
 				// AI
 				/*
@@ -1150,6 +1280,8 @@ int main(int argc, char **argv)
 					Freeze2: posX - 0x48 (4 bytes)
 					Related to velocity?
 
+					Path: posX - 0x38 (0, 1, or 2)
+
 					Track Progress: posX - 0x4C (2 bytes)
 					This determines if you're in 1st, 2nd, 3rd, etc.
 					This is used to trigger rotation, steering,
@@ -1157,8 +1289,11 @@ int main(int argc, char **argv)
 					(like the Coco Park tunnel)
 				*/
 
+				// In a 2-player game, there is one player over network
+				int numberOfNetworkPlayers = 1;
+
 				// Move unwanted players into oblivion
-				for (int i = 1; i < 7; i++)
+				for (int i = numberOfNetworkPlayers; i < 7; i++)
 				{
 					int Gone = 99999999;
 					int aiX = P1xAddr - 0x354 - 0x670 * i;

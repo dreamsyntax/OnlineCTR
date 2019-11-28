@@ -958,9 +958,15 @@ int main(int argc, char **argv)
 			// not part of original 8
 			if (characterIDs[1] > 7)
 			{
-				// Drop LOD to 3
-				char _3 = 3;
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_3, sizeof(_3), 0);
+				// if both the server and client are playing
+				// as the same unlocked character, then LOD
+				// does not need to change
+				if (characterIDs[0] != characterIDs[1])
+				{
+					// Drop LOD to 3
+					char _3 = 3;
+					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_3, sizeof(_3), 0);
+				}
 			}
 
 			// If the net player is an original player, 

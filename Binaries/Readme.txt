@@ -65,6 +65,9 @@ Game Graphics:
 		Fake Crash
 		N. Tropy
 
+	If the server and client are both playing as the same unlockable
+	character, then LOD will stay at level 1 (highest quality)
+
 System stability with Oxide is not perfect. This mod makes CTR more stable
 with Oxide than the original PlayStation hardware. However, some menus may
 freeze while the oxide cheat is enabled	

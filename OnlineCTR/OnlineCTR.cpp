@@ -1014,6 +1014,11 @@ void getRaceData()
 		// you're just in a boring menu
 		printf("Failed to find NavAddr[0], either you are in a menu, or something went wrong\n");
 		inSomeMenu = true;
+
+		// we are in a menu (assuming nothing went wrong).
+		// Lets leave the function, since the rest of the
+		// function is only for races
+		return;
 	}
 
 	// calculate how many total nav points there are

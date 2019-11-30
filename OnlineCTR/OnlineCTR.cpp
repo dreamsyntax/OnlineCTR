@@ -1092,11 +1092,24 @@ void getRaceData()
 	int min = baseAddress + 0xC20000;
 	int max = baseAddress + 0xC70000;
 
-	// battle tracks
+	// battle tracks have less geometry,
+	// move range back
 	if (trackID > 17)
 	{
 		min = baseAddress + 0xBE0000;
 		max = baseAddress + 0xC00000;
+	}
+
+	// if LOD is 3 or 4, move range
+	// back even farther (race + battle)
+	if (LevelOfDetail >= 3)
+	{
+		// Nav Addresses will be farther back
+		// because there is less geometry behind it
+		min -= 0x30000;
+
+		// don't push back max
+		// that way the search is extended
 	}
 
 	// Get Start Line Positions
@@ -1242,6 +1255,7 @@ void drawAI(int aiNumber, short netPos[3])
 	// Write to all nav points
 	// it would be nice if we could only write the nav points on the path that the AI is on,
 	// but that doesn't work, so we need to write to all nav points on all 3 paths
+
 	for (int pathByte = 0; pathByte < 3; pathByte++)
 	{
 		for (int i = 0; i < numNodesInPaths[3 * trackID + (int)pathByte]; i++)
@@ -1346,22 +1360,23 @@ void updateRace()
 
 int main(int argc, char **argv)
 {
-	/*union
+	union
 	{
 		short x[3];
 		unsigned char y[6];
 	} x;
 
-	// 393, 767, -1408
+	// -3005, 677, -4693
+	// 67 244 165 2 171 237
 
-	x.x[0] = 393;
-	x.x[1] = 767;
-	x.x[2] = -1408;
+	x.x[0] = -3005;
+	x.x[1] = 677;
+	x.x[2] = -4693;
 
 	printf("%hu, %hu, %hu\n", x.x[0], x.x[1], x.x[2]);
 	for(int i = 0; i < 6; i++)printf("%d ", x.y[i]);
 
-	printf("\n");*/
+	printf("\n");
 
 	//=======================================================================
 
@@ -1419,7 +1434,8 @@ int main(int argc, char **argv)
 			&& 
 			// these are set to true, after checking for race data.
 			// So, if you haven't already checked for data yet
-			(!inRace && !inSomeMenu))
+			(!inRace && !inSomeMenu)
+			)
 		{
 			// Check for data
 			// This will determine if you are in a menu,

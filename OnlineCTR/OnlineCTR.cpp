@@ -28,9 +28,6 @@ bool inSomeMenu = false;
 bool pressingF9 = false;
 bool pressingF10 = false;
 
-const char *host;
-char*    serverName;
-IPaddress serverIP;
 SDLNet_SocketSet socketSet;
 TCPsocket mySocket;
 TCPsocket clientSocket[8];
@@ -476,15 +473,26 @@ void initialize()
 	printf("Enter: ");
 	scanf("%d", &choice);
 
+	// name of the server that you connect to
+	char* serverName = nullptr;
+
+	// if you want to be server
 	if (choice == 1)
 	{
+		// set bool
+		// set max variables
+		// leave name as nullptr
 		isServer = true;
 		MAX_SOCKETS = 9;
 		MAX_CONNECTIONS = MAX_SOCKETS - 1;
-		serverName = nullptr;
 	}
+
+	// if you dont hit 1, you're a client
 	else
 	{
+		// set bool
+		// set max variables
+		// get server name
 		isClient = true;
 		MAX_SOCKETS = 1;
 		MAX_CONNECTIONS = 1;
@@ -493,6 +501,7 @@ void initialize()
 		scanf("%79s", serverName);
 	}
 
+	// get the port
 	printf("Enter Port: ");
 	scanf("%d", &PORT);
 
@@ -509,7 +518,19 @@ void initialize()
 		socketIsFree[loop] = true; // Set all our sockets to be free (i.e. available for use for new client connections)
 	}
 
+	// the IP of the server
+	// this is not the same as serverName
+	// serverName goes through DNS (could be IP or URL) 
+	// serverIP is the IP that the DNS returns
+	IPaddress serverIP;
+
+	// Get the IP from the DNS, given the serverName
 	int hostResolved = SDLNet_ResolveHost(&serverIP, serverName, PORT);
+
+	// if you do not want to go through DNS, you
+	// can set the IP and Port by copying bytes
+	// into serverIP, but I do it this way so that
+	// I can use URLs
 
 	// if you are server, this opens a server socket on your PC
 	// if you are client, this opens a connection socket to server
@@ -522,6 +543,7 @@ void updateNetwork()
 	// If you are server
 	if (isServer)
 	{
+		// check the sockets
 		SDLNet_CheckSockets(socketSet, 0);
 
 		// if we see activity on the server socket,
@@ -529,6 +551,7 @@ void updateNetwork()
 		// somebody is trying to connect
 		if (SDLNet_SocketReady(mySocket) != 0)
 		{
+			// only accept a connection if there is room left on the server
 			if (clientCount < MAX_CONNECTIONS)
 			{
 				printf("Found connection\n");
@@ -545,10 +568,16 @@ void updateNetwork()
 					}
 				}
 
+				// add socket to the clientSocket array
+				// add socket to the socketSet
+				// incrememnt clientCount
 				clientSocket[freeSpot] = SDLNet_TCP_Accept(mySocket);
 				SDLNet_TCP_AddSocket(socketSet, clientSocket[freeSpot]);
 				clientCount++;
 
+				// send a message to the client
+				// This message does not have a tag, so client will throw it out
+				// I will fix this later, when we actually need to use it
 				int len = sprintf(sendBuf, "You are client %d", clientCount);
 				SDLNet_TCP_Send(clientSocket[freeSpot], (void *)sendBuf, len + 1);
 			}
@@ -561,13 +590,11 @@ void updateNetwork()
 			// it means somebody sent us a message
 			if (SDLNet_SocketReady(clientSocket[clientNumber]) != 0)
 			{
-				// Clearingi before Recv will erase any message
-				// that you may want to send (trackID or Start)
-
 				// clear before Recv
 				memset(recvBuf, 0, BUFFER_SIZE);
 				receivedByteCount = SDLNet_TCP_Recv(clientSocket[clientNumber], recvBuf, BUFFER_SIZE);
 
+				// check for an error
 				if (receivedByteCount == -1)
 					printf("Error: %s", SDLNet_GetError());
 
@@ -590,17 +617,10 @@ void updateNetwork()
 					}
 				}
 
-				// print message if I got one
-				//if(receivedByteCount > 0)
-				//	printf("From Client #%d: %s\n", clientCount, recvBuf);
-
-				// clear before Send
-				//memset(sendBuf, 0, BUFFER_SIZE);
-				//sendLength = sprintf(sendBuf, "HelloFromServer");
+				// send a message to teh client
 				int x = SDLNet_TCP_Send(clientSocket[clientNumber], sendBuf, sendLength + 1);
 
-				//printf("Sending: %s\n", sendBuf);
-
+				// check for an error
 				if (x == -1)
 					printf("Error: %s", SDLNet_GetError());
 
@@ -618,30 +638,33 @@ void updateNetwork()
 
 	if (isClient)
 	{
+		// check the sockets
 		SDLNet_CheckSockets(socketSet, 0);
 
+		// The server uses mySocket as a temporary connection
+		// The client uses mySocket for all server communication
+		// This is because client will only be connected to
+		// one socket, which is the server
+
+		// if we have activity in our socket (assuming its from Server),
+		// it means the server is trying to send us something
 		if (SDLNet_SocketReady(mySocket) != 0)
 		{
 			// clear before Recv
 			memset(recvBuf, 0, BUFFER_SIZE);
 			receivedByteCount = SDLNet_TCP_Recv(mySocket, recvBuf, BUFFER_SIZE);
 
+			// check for an error
 			if (receivedByteCount == -1)
 				printf("Error: %s", SDLNet_GetError());
 
+			// still need to handle disconnection
+			// I will work on that later
 
-			// print message if I got one
-			//if (receivedByteCount != 0)
-			//	printf("From Server: %s\n", recvBuf);
-
-			// clear before Send
-			//memset(sendBuf, 0, BUFFER_SIZE);
-			//sendLength = sprintf(sendBuf, "HelloFromClient");
-
+			// send a message to the server
 			int x = SDLNet_TCP_Send(mySocket, sendBuf, sendLength + 1);
 
-			//printf("Sending: %s\n", sendBuf);
-
+			// check for an error
 			if (x == -1)
 				printf("Error: %s", SDLNet_GetError());
 		}
@@ -650,6 +673,7 @@ void updateNetwork()
 
 void updateTrackSelection()
 {
+	// reset variables because we are not in race
 	P1xAddr = -1;
 	inRace = false;
 
@@ -688,8 +712,10 @@ void updateTrackSelection()
 			// Enable Battle Tracks in Arcade
 			if (GetAsyncKeyState(VK_F9) && !pressingF9)
 			{
+				// this disables key-repeat
 				pressingF9 = true;
 
+				// Write 25 to the track selection menu, which brings us to battle tracks
 				char _25 = 25;
 				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &_25, sizeof(_25), 0);
 			}
@@ -701,6 +727,7 @@ void updateTrackSelection()
 			// Choose Random Track if you can't decide
 			if (GetAsyncKeyState(VK_F10) && !pressingF10)
 			{
+				// this disables key-repeat
 				pressingF10 = true;
 
 				// get random track
@@ -970,6 +997,9 @@ void updateLoadingScreen()
 			{
 				// Set LOD to 2
 				char _2 = 2;
+
+				// This prevents the game from crashing while plaing as Oxide,
+				// by lowering geometric detail, and decreasing RAM usage
 				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_2, sizeof(_2), 0);
 			}
 		}
@@ -992,22 +1022,30 @@ void getRaceData()
 	// Get Start Line Positions
 	for (int i = 0; i < max - min; ) // put nothing in the end
 	{
+		// Scan memory to see what values there are
 		short dataShort[3];
 		ReadProcessMemory(handle, (PBYTE*)(min + i + 0x0), &dataShort[0], sizeof(short), 0);
 		ReadProcessMemory(handle, (PBYTE*)(min + i + 0x2), &dataShort[1], sizeof(short), 0);
 		ReadProcessMemory(handle, (PBYTE*)(min + i + 0x4), &dataShort[2], sizeof(short), 0);
 
+		// Check to see if the values at these addresses
+		// match the values of the first navigation point for this track
 		if (dataShort[0] == PosNav1[3 * trackID + 0])
 			if (dataShort[1] == PosNav1[3 * trackID + 1])
 				if (dataShort[2] == PosNav1[3 * trackID + 2])
 				{
+					// If there is a match, then we found
+					// the navigation address
 					NavAddr[0] = min + i;
 					printf("NavAddr[0]: %p\n", min + i);
 					break;
 				}
+
+		// skip to next "short"
 		i += 2;
 	}
 
+	// if we did not find the navigation address
 	if (NavAddr[0] == -1)
 	{
 		// If this fails, then you're not in a race,
@@ -1038,6 +1076,8 @@ void getRaceData()
 	unsigned char title[] = "Online";
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3EC79), &title, 6, 0);
 
+	// we are definitely in a race
+	// inRace lets us teleport AIs to the proper positions
 	inRace = true;
 }
 
@@ -1253,6 +1293,7 @@ int main(int argc, char **argv)
 		// sleep for 2ms so that network ins't clogged
 		Sleep(2);
 
+		// handle all message reading and writing
 		updateNetwork();
 
 		// Check to see if you are in the track selection menu
@@ -1281,6 +1322,7 @@ int main(int argc, char **argv)
 		// when you're in the loading screen
 		if (gameStateCurr == 2)
 		{
+			// handle characters and LODs
 			updateLoadingScreen();
 
 			// restart the loop
@@ -1314,6 +1356,7 @@ int main(int argc, char **argv)
 
 	} while (shutdownServer == false); // End of main loop
 
+	// delete everything we initialized
 	SDLNet_FreeSocketSet(socketSet);
 	SDLNet_TCP_Close(mySocket);
 	SDLNet_Quit();

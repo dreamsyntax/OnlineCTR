@@ -24,6 +24,7 @@ bool isServer = false;
 bool isClient = false;
 bool inRace = false;
 bool inSomeMenu = false;
+bool loadingRace = false;
 
 bool pressingF9 = false;
 bool pressingF10 = false;
@@ -416,6 +417,7 @@ unsigned char weaponPrev; // relative to posX
 unsigned char weaponCurr; // relative to posX
 unsigned char trackID; // 0x163671A
 unsigned char trackVideoID; // 0x16379C8
+unsigned char LevelOfDetail; // 0xB0F85C
 unsigned long long menuState;
 
 // Distance to Finish for Player 1
@@ -445,12 +447,24 @@ void initialize()
 	// Initialize random number generator
 	srand(time(NULL));
 
-	// Open the ePSXe.exe process
-	DWORD procID = GetProcId();
+	printf("Step 1: Open ePSXe.exe\n");
+	printf("Step 2: Open Crash Team Racing SCUS_94426\n");
+	printf("Step 3: Go to character selection\n");
+	printf("\n");
+	printf("Step 4: Enter ProcessID below\n");
+	printf("If you have one instance of ePSXe, enter 0 for auto detection\n");
+	printf("Enter: ");
+
+	DWORD procID = 0;
+	scanf("%d", &procID);
+
+	// auto detect the procID if the user enters 0
+	if(procID == 0) procID = GetProcId();
+
+	// get the base address, relative to the module
 	baseAddress = GetModuleBaseAddress(procID, L"ePSXe.exe");
 
-	//printf("%08X\n", baseAddress);
-
+	// if the procID is not found
 	if (!procID)
 	{
 		printf("Failed to find ePSXe.exe\n");
@@ -461,17 +475,30 @@ void initialize()
 		exit(0);
 	}
 
+	// open the process with procID, and store it in the 'handle'
 	handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, procID);
+
+	// if handle fails to open
+	if (!handle)
+	{
+		printf("Failed to open process\n");
+		system("pause");
+		exit(0);
+	}
 
 	// Unlock all cars and tracks immediately
 	unsigned long long value = 18446744073709551615;
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1070C), &value, sizeof(value), 0);
+
+	printf("\nStep 5: Configure Network\n");
 
 	int choice = 0;
 	printf("1: Server\n");
 	printf("2: Client\n");
 	printf("Enter: ");
 	scanf("%d", &choice);
+
+	printf("\n");
 
 	// name of the server that you connect to
 	char* serverName = nullptr;
@@ -536,6 +563,12 @@ void initialize()
 	// if you are client, this opens a connection socket to server
 	mySocket = SDLNet_TCP_Open(&serverIP);
 	SDLNet_TCP_AddSocket(socketSet, mySocket);
+
+	// check for any problem when trying to connect
+	if (isClient && !mySocket)
+	{
+		printf("Failed to connect to server\n");
+	}
 }
 
 void updateNetwork()
@@ -674,25 +707,78 @@ void updateNetwork()
 	}
 }
 
-void updateTrackSelection()
+void UnlockPlayersAndTracks()
 {
-	// reset variables because we are not in race
-	P1xAddr = -1;
-	inRace = false;
-
 	// Unlock all cars and tracks immediately
 	unsigned long long value = 18446744073709551615;
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1070C), &value, sizeof(value), 0);
 
-	// Play as Oxide if you press F11
-	// works on server and client
-	if (GetAsyncKeyState(VK_F11))
+	// This writes 0b11111111...
+	// which enables all flags in 8 bytes.
+	
+	// These flags determine what is unlocked,
+	// so by setting all bits to 1, it unlocks everything
+}
+
+void CalculateLOD()
+{
+	// Set LOD to 1 by default
+	LevelOfDetail = 1;
+
+	// if network player is using someone
+	// who is an unlockable character,
+	// not part of original 8
+	if (characterIDs[1] > 7)
 	{
-		// set character ID to 15
-		char _15 = 15;
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &_15, sizeof(_15), 0);
+		// if both the server and client are playing
+		// as the same unlocked character, then LOD
+		// does not need to change
+		if (characterIDs[0] != characterIDs[1])
+		{
+			// Drop LOD to 3
+			LevelOfDetail = 3;
+		}
 	}
 
+	// If the net player is an original player, 
+	// then choose if LOD should drop depending on Oxide
+	else
+	{
+		// if you are playing as Oxide
+		if (characterIDs[0] == 15)
+		{
+			// if you're choosing a track where LOD needs to drop
+			if (
+				trackID == 4 ||	// Mystery Caves
+				trackID == 10 ||// Polar Pass
+				trackID == 11 ||// Cortex Castle
+				trackID == 13 ||// Hot Air Skyway
+				trackID == 14 ||// N Gin Labs
+				trackID == 15	// Oxide Station
+				)
+			{
+				// Set LOD to 2
+				LevelOfDetail = 2;
+			}
+		}
+	}
+
+	// Set the Level of Detail
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &LevelOfDetail, sizeof(LevelOfDetail), 0);
+}
+
+void SendOnlinePlayersToRAM()
+{
+	// put network characters into RAM
+	for (int i = 1; i < 2; i++)
+	{
+		char oneByte = (char)characterIDs[i];
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2 * i), &oneByte, 1, 0); // 4, for 2 shorts
+	}
+}
+
+void SyncPlayersAndMenus()
+{
 	// Get characterID for this player
 	// for characters 0 - 7:
 	// CharacterID[i] : 0x1608EA4 + 2 * i
@@ -793,6 +879,9 @@ void updateTrackSelection()
 			// if race is starting
 			if (menuA == 2 && menuB == 1)
 			{
+				// let the mod know that a race is loading
+				loadingRace = true;
+
 				// start the race, tell all clients to start
 				P1xAddr = -1;
 				NavAddr[0] = -1;
@@ -930,6 +1019,9 @@ void updateTrackSelection()
 			// if you get the message to start
 			if (messageID == 2)
 			{
+				// let the mod know that we are trying to load a race
+				loadingRace = true;
+
 				char one = 1;
 				char two = 2;
 
@@ -948,65 +1040,50 @@ void updateTrackSelection()
 	}
 }
 
+void updateTrackSelection()
+{
+	// reset variables because we are not in race
+	P1xAddr = -1;
+	inRace = false;
+
+	// May as well unlock all players and tracks,
+	// just in case someone hasn't unlocked them yet
+	UnlockPlayersAndTracks();
+
+	// Play as Oxide if you press F11
+	// works on server and client
+	if (GetAsyncKeyState(VK_F11))
+	{
+		// set character ID to 15
+		char _15 = 15;
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &_15, sizeof(_15), 0);
+	}
+
+	// allows server and client to have synchronized menus,
+	// also server and client give each other thier selected characters
+	SyncPlayersAndMenus();
+
+	// determine what LOD should be loaded,
+	// to prevent crashing in the race
+	CalculateLOD();
+}
+
 void updateLoadingScreen()
 {
 	// reset variable
 	inRace = false;
 	inSomeMenu = false;
 
-	// put network characters into RAM
-	for (int i = 1; i < 2; i++)
-	{
-		char oneByte = (char)characterIDs[i];
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2 * i), &oneByte, 1, 0); // 4, for 2 shorts
-	}
+	// constantly write these values,
+	// to make sure the right characters are loaded
+	SendOnlinePlayersToRAM();
 
-	// Set LOD to 1 by default
-	char _1 = 1;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_1, sizeof(_1), 0);
+	// dont call CalculateLOD becasue there
+	// is no way it can change during loading screen,
+	// characters and tracks are already chosen
 
-	// if network player is using someone
-	// who is an unlockable character,
-	// not part of original 8
-	if (characterIDs[1] > 7)
-	{
-		// if both the server and client are playing
-		// as the same unlocked character, then LOD
-		// does not need to change
-		if (characterIDs[0] != characterIDs[1])
-		{
-			// Drop LOD to 3
-			char _3 = 3;
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_3, sizeof(_3), 0);
-		}
-	}
-
-	// If the net player is an original player, 
-	// then choose if LOD should drop depending on Oxide
-	else
-	{
-		// if you are playing as Oxide
-		if (characterIDs[0] == 15)
-		{
-			// if you're choosing a track where LOD needs to drop
-			if (
-				trackID == 4 ||	// Mystery Caves
-				trackID == 10 ||// Polar Pass
-				trackID == 11 ||// Cortex Castle
-				trackID == 13 ||// Hot Air Skyway
-				trackID == 14 ||// N Gin Labs
-				trackID == 15	// Oxide Station
-				)
-			{
-				// Set LOD to 2
-				char _2 = 2;
-
-				// This prevents the game from crashing while plaing as Oxide,
-				// by lowering geometric detail, and decreasing RAM usage
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &_2, sizeof(_2), 0);
-			}
-		}
-	}
+	// Set the Level of Detail
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &LevelOfDetail, sizeof(LevelOfDetail), 0);
 }
 
 void getRaceData()
@@ -1053,7 +1130,10 @@ void getRaceData()
 	{
 		// If this fails, then you're not in a race,
 		// you're just in a boring menu
-		printf("Failed to find NavAddr[0], either you are in a menu, or something went wrong\n");
+		printf("\n");
+		printf("Failed to find NavAddr[0]\n");
+		printf("If you're in a race, there was a problem\n");
+		printf("Otherwise, ignore this\n");
 		inSomeMenu = true;
 
 		// we are in a menu (assuming nothing went wrong).
@@ -1153,25 +1233,23 @@ void drawAI(int aiNumber, short netPos[3])
 	// That is just how CTR was programmed in 1999
 
 	// AI[n]x = P1x - 0x354 - 0x670 * n
-	int aiX = P1xAddr - 0x354 - 0x670 * aiNumber;
+	//int aiX = P1xAddr - 0x354 - 0x670 * aiNumber;
 
-	// which Path is the AI on
-	char pathByte = 0;
+	// This does not work yet, but it reads or write the pathByte that
+	// the AI is on. If we can override it, then we can control which AI is on which path
+	//WriteProcessMemory(handle, (PBYTE*)(aiX - 0x38), &pathByte, sizeof(pathByte), 0);
 
-	// Set the Path value to 0
-	// By restricting the AI to one path, there
-	// are less NAV points that need to be set
-	ReadProcessMemory(handle, (PBYTE*)(aiX - 0x38), &pathByte, sizeof(pathByte), 0);
-
-	// set all nodes on the path that the AI is on.
-	// This is 33% of all nodes on the track.
-	// It does not set all nodes in all paths,
-	// just all nodes in one path
-	for (int i = 0; i < numNodesInPaths[3 * trackID + (int)pathByte]; i++)
+	// Write to all nav points
+	// it would be nice if we could only write the nav points on the path that the AI is on,
+	// but that doesn't work, so we need to write to all nav points on all 3 paths
+	for (int pathByte = 0; pathByte < 3; pathByte++)
 	{
-		WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 0), &netPos[0], 2, 0);
-		WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 2), &netPos[1], 2, 0);
-		WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 4), &netPos[2], 2, 0);
+		for (int i = 0; i < numNodesInPaths[3 * trackID + (int)pathByte]; i++)
+		{
+			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 0), &netPos[0], 2, 0);
+			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 2), &netPos[1], 2, 0);
+			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 4), &netPos[2], 2, 0);
+		}
 	}
 }
 
@@ -1344,6 +1422,11 @@ int main(int argc, char **argv)
 			(!inRace && !inSomeMenu))
 		{
 			// Check for data
+			// This will determine if you are in a menu,
+			// or if you are in a race. It will also set the
+			// inRace and inSomeMenu booleans. I will make
+			// a better way of determining one from the other,
+			// in the future
 			getRaceData();
 		}
 

@@ -534,7 +534,7 @@ void initialize()
 
 	// if you are server, this opens a server socket on your PC
 	// if you are client, this opens a connection socket to server
-	TCPsocket mySocket = SDLNet_TCP_Open(&serverIP);
+	mySocket = SDLNet_TCP_Open(&serverIP);
 	SDLNet_TCP_AddSocket(socketSet, mySocket);
 }
 
@@ -543,7 +543,9 @@ void updateNetwork()
 	// If you are server
 	if (isServer)
 	{
-		// check the sockets
+		// check all sockets in the set,
+		// including mySocket, which (for the server)
+		// is only for temporary connections
 		SDLNet_CheckSockets(socketSet, 0);
 
 		// if we see activity on the server socket,
@@ -638,7 +640,8 @@ void updateNetwork()
 
 	if (isClient)
 	{
-		// check the sockets
+		// check the socket, there should only be
+		// one socket in this case, for the server
 		SDLNet_CheckSockets(socketSet, 0);
 
 		// The server uses mySocket as a temporary connection

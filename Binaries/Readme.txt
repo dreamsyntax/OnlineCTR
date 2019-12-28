@@ -15,7 +15,9 @@ Press 2, hit enter
 Enter IP, hit enter
 Enter port, hit enter
 
-Choose any character you want
+Choose one of the original 8 characters:
+crash, cortex, tiny, coco, ngin, dingo, polar, pura
+Other characters might work, and might crash (WIP)
 
 While in Track Selection:
 	If you want to play as Oxide, start holding F11, and keep holding F11 until race starts
@@ -32,6 +34,9 @@ While in Track Selection:
 	include Battle Maps, only Race Maps
 
 	When the race starts, you should only see 2 racers. If you see 8, something went wrong
+
+While in race:
+	If the traffic lights do not appear, it is because other players have not gotten to the starting line yet
 
 Game Graphics:
 	Terminology:

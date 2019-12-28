@@ -20,12 +20,6 @@ const unsigned short BUFFER_SIZE = 512;
 unsigned short MAX_SOCKETS;
 unsigned short MAX_CONNECTIONS;
 
-bool isServer = false;
-bool isClient = false;
-bool inRace = false;
-bool inSomeMenu = false;
-bool loadingRace = false;
-
 bool pressingF9 = false;
 bool pressingF10 = false;
 
@@ -40,64 +34,78 @@ int receivedByteCount = 0;
 int clientCount = 0;
 bool shutdownServer = false;
 
-DWORD GetProcId()
+// needed for all hacks
+DWORD GetProcId(const wchar_t* processName)
 {
-	PROCESSENTRY32   pe32;
-	HANDLE         hSnapshot = NULL;
+	// create snapshot of PROCESS
+	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
-	pe32.dwSize = sizeof(PROCESSENTRY32);
-	hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-
-	if (Process32First(hSnapshot, &pe32))
+	// check for valid
+	if (hSnap != INVALID_HANDLE_VALUE)
 	{
-		do
+		// process entry
+		PROCESSENTRY32 procEntry;
+		procEntry.dwSize = sizeof(procEntry);
+
+		// start looping through processes
+		if (Process32First(hSnap, &procEntry))
 		{
-			char* test[28];
-			for (int i = 0; i < 18; i++)
-				test[i] = (char*)&pe32.szExeFile + i;
+			// check if this is the right process
+			do
+			{
+				// if the name of this process is the name we are searching
+				if (!_wcsicmp(procEntry.szExeFile, processName))
+				{
+					// return this process ID
+					return procEntry.th32ProcessID;
+					break;
+				}
 
-			if (*test[0] == 'e' &&
-				*test[2] == 'P' &&
-				*test[4] == 'S' &&
-				*test[6] == 'X' &&
-				*test[8] == 'e' &&
-				*test[10] == '.' &&
-				*test[12] == 'e' &&
-				*test[14] == 'x' &&
-				*test[16] == 'e')
-
-				return pe32.th32ProcessID;
-
-		} while (Process32Next(hSnapshot, &pe32));
+				// check the next one
+			} while (Process32Next(hSnap, &procEntry));
+		}
 	}
 
-	if (hSnapshot != INVALID_HANDLE_VALUE)
-		CloseHandle(hSnapshot);
+	// close the snap and return 0
+	CloseHandle(hSnap);
 	return 0;
 }
 
+// Needed for all ePSXe hacks, used for DLLs in other hacks
 uintptr_t GetModuleBaseAddress(DWORD procId, const wchar_t* modName)
 {
-	uintptr_t modBaseAddr = 0;
+	// create snapshot of MODULE and MODULE32
 	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, procId);
+
+	// check for valid
 	if (hSnap != INVALID_HANDLE_VALUE)
 	{
+		// module entry
 		MODULEENTRY32 modEntry;
 		modEntry.dwSize = sizeof(modEntry);
+
+		// start looping through modules
 		if (Module32First(hSnap, &modEntry))
 		{
+			// check if this is the right module
 			do
 			{
+				// if the name of this module is the name we are searching
 				if (!_wcsicmp(modEntry.szModule, modName))
 				{
-					modBaseAddr = (uintptr_t)modEntry.modBaseAddr;
+					// return this module base address
+					return (uintptr_t)modEntry.modBaseAddr;
 					break;
 				}
+
+				// check the next one
 			} while (Module32Next(hSnap, &modEntry));
 		}
 	}
+
+	// close the snap and return 0
 	CloseHandle(hSnap);
-	return modBaseAddr;
+	return 0;
 }
 
 // First nav pos of each track
@@ -411,7 +419,6 @@ short numNodesInPaths[25 * 3] =
 	64,
 };
 
-unsigned char gameStatePrev; // 0x161A871
 unsigned char gameStateCurr; // 0x161A871
 unsigned char weaponPrev; // relative to posX
 unsigned char weaponCurr; // relative to posX
@@ -420,17 +427,35 @@ unsigned char trackVideoID; // 0x16379C8
 unsigned char LevelOfDetail; // 0xB0F85C
 unsigned long long menuState;
 
-// Distance to Finish for Player 1
-// X + 0x1B4
-
 unsigned int P1xAddr = -1;
 unsigned int NavAddr[3];
+
+bool isServer = false;
+bool isClient = false;
+bool inRace = false;
+bool inSomeMenu = false;
+bool waitingAtStart = false;
+
+// used by server only
+// This is hardcoded to wait for one client
+// This needs to wait for 7 clients in the future
+bool waitingForClient = false;
+bool serverReadyToRace = false;
+
+/*
+MessageID
+0 = trackID
+1 = lapRow message
+2 = start loading
+3 = position
+4 = kart ID
+5 = synced (ready to start loading, or ready to start race)
+*/
 
 // ID[0] is the server's character
 short characterIDs[8];
 
-// copied from here 
-// https://stackoverflow.com/questions/5891811/generate-random-number-between-1-and-3-in-c
+// copied from here https://stackoverflow.com/questions/5891811/generate-random-number-between-1-and-3-in-c
 int roll(int min, int max)
 {
 	// x is in [0,1[
@@ -440,6 +465,19 @@ int roll(int min, int max)
 	int that = min + static_cast<int>(x * (max - min));
 
 	return that;
+}
+
+void UnlockPlayersAndTracks()
+{
+	// Unlock all cars and tracks immediately
+	unsigned long long value = 18446744073709551615;
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1070C), &value, sizeof(value), 0);
+
+	// This writes 0b11111111...
+	// which enables all flags in 8 bytes.
+
+	// These flags determine what is unlocked,
+	// so by setting all bits to 1, it unlocks everything
 }
 
 void initialize()
@@ -459,7 +497,7 @@ void initialize()
 	scanf("%d", &procID);
 
 	// auto detect the procID if the user enters 0
-	if(procID == 0) procID = GetProcId();
+	if(procID == 0) procID = GetProcId(L"ePSXe.exe");
 
 	// get the base address, relative to the module
 	baseAddress = GetModuleBaseAddress(procID, L"ePSXe.exe");
@@ -487,9 +525,8 @@ void initialize()
 	}
 
 	// Unlock all cars and tracks immediately
-	unsigned long long value = 18446744073709551615;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1070C), &value, sizeof(value), 0);
-
+	UnlockPlayersAndTracks();
+	
 	printf("\nStep 5: Configure Network\n");
 
 	int choice = 0;
@@ -571,6 +608,35 @@ void initialize()
 	}
 }
 
+void drawAI(int aiNumber, short netPos[3])
+{
+	// Changing the 12-byte positions will not move players
+
+	// Changing these values will move players, 
+	// That is just how CTR was programmed in 1999
+
+	// AI[n]x = P1x - 0x354 - 0x670 * n
+	//int aiX = P1xAddr - 0x354 - 0x670 * aiNumber;
+
+	// This does not work yet, but it reads or write the pathByte that
+	// the AI is on. If we can override it, then we can control which AI is on which path
+	//WriteProcessMemory(handle, (PBYTE*)(aiX - 0x38), &pathByte, sizeof(pathByte), 0);
+
+	// Write to all nav points
+	// it would be nice if we could only write the nav points on the path that the AI is on,
+	// but that doesn't work, so we need to write to all nav points on all 3 paths
+
+	for (int pathByte = 0; pathByte < 3; pathByte++)
+	{
+		for (int i = 0; i < numNodesInPaths[3 * trackID + (int)pathByte]; i++)
+		{
+			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 0), &netPos[0], 2, 0);
+			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 2), &netPos[1], 2, 0);
+			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 4), &netPos[2], 2, 0);
+		}
+	}
+}
+
 void updateNetwork()
 {
 	// If you are server
@@ -629,16 +695,35 @@ void updateNetwork()
 				memset(recvBuf, 0, BUFFER_SIZE);
 				receivedByteCount = SDLNet_TCP_Recv(clientSocket[clientNumber], recvBuf, BUFFER_SIZE);
 
+				//printf("Recv: %s\n", recvBuf);
+
 				// check for an error
 				if (receivedByteCount == -1)
 					printf("Error: %s", SDLNet_GetError());
 
 				// Get Character ID from Client
-				int messageID = 4;
+				int messageID = 0;
 				int kartID = 0;
 				if (sscanf(recvBuf, "%d", &messageID) == 1)
 				{
-					// 3 means Position Message
+					// message 0, 1, 2 will not come from client
+
+					// 3 means Position Message (same in server and client)
+					if (messageID == 3)
+					{
+						// This holds the position you get from network
+						short netPos[3];
+
+						// Get online player's position from the network message
+						if (sscanf(recvBuf, "%d %d %d %d", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
+						{
+							// draw the first AI (index = 0)
+							// at the position that we get
+							drawAI(0, netPos);
+						}
+					}
+
+					// 4 means Kart ID
 					if (messageID == 4)
 					{
 						if (sscanf(recvBuf, "%d %d", &messageID, &kartID) == 2)
@@ -652,8 +737,28 @@ void updateNetwork()
 					}
 				}
 
+				// 5 means start race at traffic lights
+				if (messageID == 5)
+				{
+					// if the server is ready to start
+					if (serverReadyToRace)
+					{
+						// this is hard-coded for one client
+						// needs to work with 7 clients
+
+						// if all clients send a 5 message,
+						// then stop waiting and start race
+						waitingForClient = false;
+
+						memset(sendBuf, 0, BUFFER_SIZE);
+						sendLength = sprintf(sendBuf, "5");
+					}
+				}
+
 				// send a message to teh client
 				int x = SDLNet_TCP_Send(clientSocket[clientNumber], sendBuf, sendLength + 1);
+
+				//printf("Send: %s\n", sendBuf);
 
 				// check for an error
 				if (x == -1)
@@ -690,34 +795,156 @@ void updateNetwork()
 			memset(recvBuf, 0, BUFFER_SIZE);
 			receivedByteCount = SDLNet_TCP_Recv(mySocket, recvBuf, BUFFER_SIZE);
 
+			//printf("Recv: %s\n", recvBuf);
+
 			// check for an error
 			if (receivedByteCount == -1)
 				printf("Error: %s", SDLNet_GetError());
 
+			int messageID = 0;
+			if (sscanf(recvBuf, "%d", &messageID) == 1)
+			{
+				// 0 means track ID
+				if (messageID == 0)
+				{
+					int trackIdFromBuf = 0;
+					int kartID = 0;
+					if (sscanf(recvBuf, "%d %d %d", &messageID, &trackIdFromBuf, &kartID) == 3)
+					{
+						// convert to one byte
+						char trackByte = (char)trackIdFromBuf;
+
+						char zero = 0;
+						char ogTrackByte = 0;
+						char OneNineOne = 191;
+						char TwoFiveFive = 255;
+
+						// Get characterID for this player
+						// for characters 0 - 7:
+						// CharacterID[i] : 0x1608EA4 + 2 * i
+						short kartID_short = (short)kartID;
+						characterIDs[1] = kartID_short;
+
+						// close the lapRowSelector
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &zero, sizeof(char), 0);
+
+						// Get original track byte
+						ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &ogTrackByte, sizeof(char), 0);
+
+						// set Text+Map address 
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackByte, sizeof(char), 0);
+
+						// set Video Address
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379C8), &trackByte, sizeof(char), 0);
+
+						// Spam the down button to update video, after selected-track changes
+						if (ogTrackByte != trackByte)
+						{
+							// progress of video in menu
+							char videoProgress[3] = { 1, 1, 1 };
+
+							// keep hitting "down" until video refreshes and sets to zero
+							while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
+							{
+								// read to see the new memory, 12 bytes, 3 ints
+								ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C48), &videoProgress[0], sizeof(char), 0); // first int
+								ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C4C), &videoProgress[1], sizeof(char), 0); // next int
+								ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C50), &videoProgress[2], sizeof(char), 0); // next int
+
+								// Hit the 'Down' button on controller
+								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x20603D), &OneNineOne, sizeof(char), 0);
+								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x22C58D), &OneNineOne, sizeof(char), 0);
+								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x99DDA8), &OneNineOne, sizeof(char), 0);
+								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB18AF8), &OneNineOne, sizeof(char), 0);
+								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB21630), &OneNineOne, sizeof(char), 0);
+							}
+						}
+					}
+				}
+
+				// 1 means lap row, NOT DONE
+				if (messageID == 1)
+				{
+					int lapIdFromBuf = 0;
+					if (sscanf(recvBuf, "%d %d", &messageID, &lapIdFromBuf) == 2)
+					{
+						// open the lapRowSelector menu, 
+						char one = 1;
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &one, sizeof(char), 0);
+
+						// convert to one byte
+						char lapByte = (char)lapIdFromBuf;
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F940), &lapByte, sizeof(lapByte), 0);
+
+						// change the spawn order
+
+						// Server:   0 1 2 3 4 5 6 7
+						// Client 1: 1 0 2 3 4 5 6 7
+						// Client 2: 1 2 0 3 4 5 6 7
+						// Client 3: 1 2 3 0 4 5 6 7
+
+						// this will change when we have more than 2 players
+						char zero = 0;
+
+						// Change the spawn order (look at comments above)
+						// With only two players, this should be fine for now
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 0), &one, sizeof(char), 0);
+						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 1), &zero, sizeof(char), 0);
+					}
+				}
+
+				// 2 means start loading, NOT DONE
+				if (messageID == 2)
+				{
+					// let the client know that we are trying to load a race
+					waitingAtStart = true;
+
+					char one = 1;
+					char two = 2;
+
+					// set menuA to 2 and menuB to 1,
+					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CE), &two, sizeof(char), 0);
+					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379D0), &one, sizeof(char), 0);
+
+					// This message will include number of players
+					// and array of characterIDs, save it for later
+					// Stop looking for messages until later
+				}
+			
+				// 3 means Position Message (same in server and client)
+				if (messageID == 3)
+				{
+					// This holds the position you get from network
+					short netPos[3];
+
+					// Get online player's position from the network message
+					if (sscanf(recvBuf, "%d %d %d %d", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
+					{
+						// draw the first AI (index = 0)
+						// at the position that we get
+						drawAI(0, netPos);
+					}
+				}
+
+				// message 4 will not come from server
+
+				// 5 means start race at traffic lights
+				if (messageID == 5)
+					waitingAtStart = false;
+			}
 			// still need to handle disconnection
 			// I will work on that later
 
 			// send a message to the server
 			int x = SDLNet_TCP_Send(mySocket, sendBuf, sendLength + 1);
 
+			//printf("Send: %s\n", sendBuf);
+
 			// check for an error
 			if (x == -1)
 				printf("Error: %s", SDLNet_GetError());
 		}
 	}
-}
-
-void UnlockPlayersAndTracks()
-{
-	// Unlock all cars and tracks immediately
-	unsigned long long value = 18446744073709551615;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1070C), &value, sizeof(value), 0);
-
-	// This writes 0b11111111...
-	// which enables all flags in 8 bytes.
-	
-	// These flags determine what is unlocked,
-	// so by setting all bits to 1, it unlocks everything
 }
 
 void CalculateLOD()
@@ -777,7 +1004,7 @@ void SendOnlinePlayersToRAM()
 	}
 }
 
-void SyncPlayersAndMenus()
+void SyncPlayersInMenus()
 {
 	// Get characterID for this player
 	// for characters 0 - 7:
@@ -879,8 +1106,14 @@ void SyncPlayersAndMenus()
 			// if race is starting
 			if (menuA == 2 && menuB == 1)
 			{
-				// let the mod know that a race is loading
-				loadingRace = true;
+				// do not start the race
+				waitingAtStart = true;
+
+				// wait for clients to be ready
+				waitingForClient = true;
+
+				// server is not ready to race
+				serverReadyToRace = false;
 
 				// start the race, tell all clients to start
 				P1xAddr = -1;
@@ -922,119 +1155,6 @@ void SyncPlayersAndMenus()
 		memset(sendBuf, 0, BUFFER_SIZE);
 		sendLength = sprintf(sendBuf, "4 %d ", (int)characterIDs[0]);
 
-		int messageID = 0;
-		if (sscanf(recvBuf, "%d", &messageID) == 1)
-		{
-			// if you get a new trackID
-			if (messageID == 0)
-			{
-				int trackIdFromBuf = 0;
-				int kartID = 0;
-				if (sscanf(recvBuf, "%d %d %d", &messageID, &trackIdFromBuf, &kartID) == 3)
-				{
-					// convert to one byte
-					char trackByte = (char)trackIdFromBuf;
-
-					char zero = 0;
-					char ogTrackByte = 0;
-					char OneNineOne = 191;
-					char TwoFiveFive = 255;
-
-					// Get characterID for this player
-					// for characters 0 - 7:
-					// CharacterID[i] : 0x1608EA4 + 2 * i
-					short kartID_short = (short)kartID;
-					characterIDs[1] = kartID_short;
-
-					// close the lapRowSelector
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &zero, sizeof(char), 0);
-
-					// Get original track byte
-					ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &ogTrackByte, sizeof(char), 0);
-
-					// set Text+Map address 
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackByte, sizeof(char), 0);
-
-					// set Video Address
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379C8), &trackByte, sizeof(char), 0);
-
-					// Spam the down button to update video, after selected-track changes
-					if (ogTrackByte != trackByte)
-					{
-						// progress of video in menu
-						char videoProgress[3] = { 1, 1, 1 };
-
-						// keep hitting "down" until video refreshes and sets to zero
-						while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
-						{
-							// read to see the new memory, 12 bytes, 3 ints
-							ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C48), &videoProgress[0], sizeof(char), 0); // first int
-							ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C4C), &videoProgress[1], sizeof(char), 0); // next int
-							ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C50), &videoProgress[2], sizeof(char), 0); // next int
-
-							// Hit the 'Down' button on controller
-							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x20603D), &OneNineOne, sizeof(char), 0);
-							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x22C58D), &OneNineOne, sizeof(char), 0);
-							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x99DDA8), &OneNineOne, sizeof(char), 0);
-							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB18AF8), &OneNineOne, sizeof(char), 0);
-							WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB21630), &OneNineOne, sizeof(char), 0);
-						}
-					}
-				}
-			}
-
-			// Not Done
-			// if you get a lapRow message 
-			if (messageID == 1)
-			{
-				int lapIdFromBuf = 0;
-				if (sscanf(recvBuf, "%d %d", &messageID, &lapIdFromBuf) == 2)
-				{
-					// open the lapRowSelector menu, 
-					char one = 1;
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &one, sizeof(char), 0);
-
-					// convert to one byte
-					char lapByte = (char)lapIdFromBuf;
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F940), &lapByte, sizeof(lapByte), 0);
-
-					// change the spawn order
-
-					// Server:   0 1 2 3 4 5 6 7
-					// Client 1: 1 0 2 3 4 5 6 7
-					// Client 2: 1 2 0 3 4 5 6 7
-					// Client 3: 1 2 3 0 4 5 6 7
-
-					// this will change when we have more than 2 players
-					char zero = 0;
-
-					// Change the spawn order (look at comments above)
-					// With only two players, this should be fine for now
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 0), &one, sizeof(char), 0);
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 1), &zero, sizeof(char), 0);
-				}
-			}
-
-			// Not Done
-			// if you get the message to start
-			if (messageID == 2)
-			{
-				// let the mod know that we are trying to load a race
-				loadingRace = true;
-
-				char one = 1;
-				char two = 2;
-
-				// set menuA to 2 and menuB to 1,
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CE), &two, sizeof(char), 0);
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379D0), &one, sizeof(char), 0);
-
-				// This message will include number of players
-				// and array of characterIDs, save it for later
-				// Stop looking for messages until later
-			}
-		}
-
 		// Get the new Track ID
 		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackID, sizeof(trackID), 0);
 	}
@@ -1046,12 +1166,7 @@ void updateTrackSelection()
 	P1xAddr = -1;
 	inRace = false;
 
-	// May as well unlock all players and tracks,
-	// just in case someone hasn't unlocked them yet
-	UnlockPlayersAndTracks();
-
 	// Play as Oxide if you press F11
-	// works on server and client
 	if (GetAsyncKeyState(VK_F11))
 	{
 		// set character ID to 15
@@ -1059,12 +1174,10 @@ void updateTrackSelection()
 		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &_15, sizeof(_15), 0);
 	}
 
-	// allows server and client to have synchronized menus,
-	// also server and client give each other thier selected characters
-	SyncPlayersAndMenus();
+	// copy server menu state to client, and exchange character info
+	SyncPlayersInMenus();
 
-	// determine what LOD should be loaded,
-	// to prevent crashing in the race
+	// determine LOD to prevent crashes
 	CalculateLOD();
 }
 
@@ -1073,6 +1186,10 @@ void updateLoadingScreen()
 	// reset variable
 	inRace = false;
 	inSomeMenu = false;
+
+	// reset messages
+	memset(recvBuf, 0, BUFFER_SIZE);
+	memset(sendBuf, 0, BUFFER_SIZE);
 
 	// constantly write these values,
 	// to make sure the right characters are loaded
@@ -1212,7 +1329,7 @@ void disableWeapons()
 	}
 }
 
-void prepareServerMessage()
+void preparePositionMessage()
 {
 	// Get Player 1 position
 	// All players have 12-byte positions (4x3). 
@@ -1238,59 +1355,8 @@ void prepareServerMessage()
 	sendLength = sprintf(sendBuf, "3 %d %d %d", compressPos[0], compressPos[1], compressPos[2]);
 }
 
-void drawAI(int aiNumber, short netPos[3])
-{
-	// Changing the 12-byte positions will not move players
-
-	// Changing these values will move players, 
-	// That is just how CTR was programmed in 1999
-
-	// AI[n]x = P1x - 0x354 - 0x670 * n
-	//int aiX = P1xAddr - 0x354 - 0x670 * aiNumber;
-
-	// This does not work yet, but it reads or write the pathByte that
-	// the AI is on. If we can override it, then we can control which AI is on which path
-	//WriteProcessMemory(handle, (PBYTE*)(aiX - 0x38), &pathByte, sizeof(pathByte), 0);
-
-	// Write to all nav points
-	// it would be nice if we could only write the nav points on the path that the AI is on,
-	// but that doesn't work, so we need to write to all nav points on all 3 paths
-
-	for (int pathByte = 0; pathByte < 3; pathByte++)
-	{
-		for (int i = 0; i < numNodesInPaths[3 * trackID + (int)pathByte]; i++)
-		{
-			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 0), &netPos[0], 2, 0);
-			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 2), &netPos[1], 2, 0);
-			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 4), &netPos[2], 2, 0);
-		}
-	}
-}
-
 void updateRace()
-{
-	// State 10 is when you're in a menu
-	// or the intro cutscene of a race
-	
-	// State 11 is the whole race, including traffic lights
-
-	// If you're in the intro cutscene
-	if (gameStateCurr != 11)
-	{
-		// nothing here yet
-		// dont know if I need this or not
-	}
-
-	// State 11 starts when the traffic lights come down,
-	// and they need to be synced before the race begins
-		
-	// If not all racers are ready to start
-	if (0)
-	{
-		// set the countdown traffic-lights to 4000
-		// Addresss = 0x161A84C, 2 bytes large
-	}
-
+{	
 	// Player 1
 	/*
 		rotX = posX + 0x96 (only for P1)
@@ -1330,37 +1396,66 @@ void updateRace()
 	// make sure none of the players have weapons
 	disableWeapons();
 
-	// get position of player
-	// put it into a message
-	prepareServerMessage();
-
-	// Server gets from client
-	// Client gets from server
-	// Parse the position from the message
-	// set all nav points to that position
-	int messageID = 0;
-	if (sscanf(recvBuf, "%d", &messageID) == 1)
+	// If not all racers are ready to start
+	if (waitingAtStart)
 	{
-		// 3 means Position Message
-		if (messageID == 3)
-		{
-			// This holds the position you get from network
-			short netPos[3];
+		// Set the traffic lights to be above the screen
+		// They are set to 3840 by default without modding
+		short wait = 4500;
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A84C), &wait, sizeof(short), NULL);
 
-			// Get online player's position from the network message
-			if (sscanf(recvBuf, "%d %d %d %d", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
+		// see if the intro cutscene is playing
+		// becomes 0 when traffic lights should show
+		char introAnimState;
+		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xC81DFE), &introAnimState, sizeof(char), NULL);
+
+		printf("%d\n", introAnimState);
+
+		// if the intro animation is done
+		if (introAnimState == 0)
+		{
+			if (isClient)
 			{
-				// draw the first AI (index = 0)
-				// at the position that we get
-				drawAI(0, netPos);
+				// let the server know you are ready
+				sendLength = sprintf(sendBuf, "5");
 			}
+
+			if (isServer)
+			{
+				serverReadyToRace = true;
+
+				// if the waiting is over
+				if (!waitingForClient)
+				{
+					// tell everyone to start
+					sendLength = sprintf(sendBuf, "5");
+
+					// start the race
+					waitingAtStart = false;
+				}
+			}
+
+			// send a message to the server that you are ready to start
+
+			// all clients send message to server
+			// when all clients and server are ready
+			// server sends start message
 		}
+
+		// skip the rest
+		return;
 	}
+
+	// Send your player's position to the server (or client)
+	// If you are the client, this sends to server, DONE
+	// If you are the server, this sends to one client, NOT DONE
+	preparePositionMessage();
+
 }
 
 int main(int argc, char **argv)
 {
-	union
+	/*union
 	{
 		short x[3];
 		unsigned char y[6];
@@ -1376,7 +1471,7 @@ int main(int argc, char **argv)
 	printf("%hu, %hu, %hu\n", x.x[0], x.x[1], x.x[2]);
 	for(int i = 0; i < 6; i++)printf("%d ", x.y[i]);
 
-	printf("\n");
+	printf("\n");*/
 
 	//=======================================================================
 
@@ -1385,8 +1480,7 @@ int main(int argc, char **argv)
 	// Main loop...
 	do
 	{
-		// 60fps means 16ms per frame
-		// sleep for 2ms so that network ins't clogged
+		// 60fps means 16ms per frame, sleep for 2ms so that network is not clogged
 		Sleep(2);
 
 		// handle all message reading and writing
@@ -1401,11 +1495,9 @@ int main(int argc, char **argv)
 		{
 			updateTrackSelection();
 
-			// Restart the loop
-			// don't proceed
+			// Restart the loop, don't proceed
 			continue;
 		}
-
 
 		// GameState
 		// 2 = loading screen
@@ -1425,9 +1517,13 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		// State 10 is when you're in a menu, or the intro cutscene of a race
+		// State 11 is the whole race, including traffic lights
+
 		// In menus, first frame is 10
 		// In regular tracks, first frame is 10 (intro cutscene)
 		// In battle tracks, first frame is 11 (traffic lights)
+
 		if (
 			// if you're in a race (or maybe menu)
 			(gameStateCurr == 11 || gameStateCurr == 10) 
@@ -1438,11 +1534,9 @@ int main(int argc, char **argv)
 			)
 		{
 			// Check for data
-			// This will determine if you are in a menu,
-			// or if you are in a race. It will also set the
-			// inRace and inSomeMenu booleans. I will make
-			// a better way of determining one from the other,
-			// in the future
+			// This will determine if you are in a menu, or if you are in a race. 
+			// It will also set the inRace and inSomeMenu booleans. I will make
+			// a better way of determining one from the other, in the future
 			getRaceData();
 		}
 

@@ -35,9 +35,6 @@ While in Track Selection:
 
 	When the race starts, you should only see 2 racers. If you see 8, something went wrong
 
-While in race:
-	If the traffic lights do not appear, it is because other players have not gotten to the starting line yet
-
 Game Graphics:
 	Terminology:
 		LOD 1 means Level of Detail you would see in 1P Arcade

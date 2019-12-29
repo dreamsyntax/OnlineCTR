@@ -434,13 +434,13 @@ bool isServer = false;
 bool isClient = false;
 bool inRace = false;
 bool inSomeMenu = false;
-bool waitingAtStart = false;
+bool pauseUntilSync = false;
 
 // used by server only
 // This is hardcoded to wait for one client
 // This needs to wait for 7 clients in the future
 bool waitingForClient = false;
-bool serverReadyToRace = false;
+bool serverSynced = false;
 
 /*
 MessageID
@@ -741,7 +741,7 @@ void updateNetwork()
 				if (messageID == 5)
 				{
 					// if the server is ready to start
-					if (serverReadyToRace)
+					if (serverSynced)
 					{
 						// this is hard-coded for one client
 						// needs to work with 7 clients
@@ -897,7 +897,7 @@ void updateNetwork()
 				if (messageID == 2)
 				{
 					// let the client know that we are trying to load a race
-					waitingAtStart = true;
+					pauseUntilSync = true;
 
 					char one = 1;
 					char two = 2;
@@ -930,7 +930,13 @@ void updateNetwork()
 
 				// 5 means start race at traffic lights
 				if (messageID == 5)
-					waitingAtStart = false;
+				{
+					pauseUntilSync = false;
+
+					// set controller mode to 1P, remove error message
+					char _1 = 1;
+					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+				}
 			}
 			// still need to handle disconnection
 			// I will work on that later
@@ -1107,13 +1113,13 @@ void SyncPlayersInMenus()
 			if (menuA == 2 && menuB == 1)
 			{
 				// do not start the race
-				waitingAtStart = true;
+				pauseUntilSync = true;
 
 				// wait for clients to be ready
 				waitingForClient = true;
 
 				// server is not ready to race
-				serverReadyToRace = false;
+				serverSynced = false;
 
 				// start the race, tell all clients to start
 				P1xAddr = -1;
@@ -1285,6 +1291,11 @@ void getRaceData()
 	// Address of X position of Player 1
 	P1xAddr = NavAddr[0] + totalPoints * 20 + 63200;
 
+	// delete this after debugging
+	int aiX = P1xAddr - 0x354;
+	printf("P1xAddr: %p\n", P1xAddr);
+	printf("AIxAddr: %p\n", aiX);
+
 	// Set Text
 	unsigned char title[] = "Online";
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3EC79), &title, 6, 0);
@@ -1396,8 +1407,13 @@ void updateRace()
 	// make sure none of the players have weapons
 	disableWeapons();
 
+	// set controller mode to 1P mode, disable error message
+	// The message gets enabled lower in the code
+	char _1 = 1;
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+
 	// If not all racers are ready to start
-	if (waitingAtStart)
+	if (pauseUntilSync)
 	{
 		// Set the traffic lights to be above the screen
 		// They are set to 3840 by default without modding
@@ -1414,6 +1430,13 @@ void updateRace()
 		// if the intro animation is done
 		if (introAnimState == 0)
 		{
+			// set controller mode to 0P mode, trigger error message
+			char _0 = 0;
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_0, sizeof(_0), NULL);
+
+			// change the error message
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3E6A4), (char*)"waiting for players...", 23, NULL);
+
 			if (isClient)
 			{
 				// let the server know you are ready
@@ -1422,7 +1445,7 @@ void updateRace()
 
 			if (isServer)
 			{
-				serverReadyToRace = true;
+				serverSynced = true;
 
 				// if the waiting is over
 				if (!waitingForClient)
@@ -1431,7 +1454,11 @@ void updateRace()
 					sendLength = sprintf(sendBuf, "5");
 
 					// start the race
-					waitingAtStart = false;
+					pauseUntilSync = false;
+
+					// set controller mode to 1P, remove error message
+					char _1 = 1;
+					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
 				}
 			}
 

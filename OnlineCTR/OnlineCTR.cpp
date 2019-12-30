@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <string>
 #include <ctime>
+#include <thread>
+#include <time.h>
 
 #include <stdio.h>
 #include <Windows.h>
@@ -467,6 +469,38 @@ int roll(int min, int max)
 	return that;
 }
 
+clock_t timePosted = 0;
+
+void SendMessageThread(char* message)
+{
+	// record time that this was posted
+	timePosted = clock();
+
+	// set controller mode to 0P mode, trigger error message
+	char _0 = 0;
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_0, sizeof(_0), NULL);
+
+	// change the error message
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3E6A4), message, strlen(message) + 1, NULL);
+
+	// leave it for one second
+	Sleep(1000);
+
+	// if no new messages have appeared
+	if (clock() - timePosted > 900)
+	{
+		// remove message
+		char _1 = 1;
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+	}
+}
+
+void SendMessage(char* message)
+{
+	std::thread t1(SendMessageThread, message);
+	t1.detach();
+}
+
 void UnlockPlayersAndTracks()
 {
 	// Unlock all cars and tracks immediately
@@ -482,6 +516,13 @@ void UnlockPlayersAndTracks()
 
 void initialize()
 {
+	HWND console = GetConsoleWindow();
+	RECT r;
+	GetWindowRect(console, &r); //stores the console's current dimensions
+
+	// 300 + height of bar (25)
+	MoveWindow(console, r.left, r.top, 400, 325, TRUE);
+
 	// Initialize random number generator
 	srand(time(NULL));
 
@@ -490,7 +531,7 @@ void initialize()
 	printf("Step 3: Go to character selection\n");
 	printf("\n");
 	printf("Step 4: Enter ProcessID below\n");
-	printf("If you have one instance of ePSXe, enter 0 for auto detection\n");
+	printf("For auto-detection, enter 0\n\n");
 	printf("Enter: ");
 
 	DWORD procID = 0;
@@ -524,6 +565,9 @@ void initialize()
 		exit(0);
 	}
 
+	// welcome the player
+	SendMessage((char*)"OnlineCTR");
+
 	// Unlock all cars and tracks immediately
 	UnlockPlayersAndTracks();
 	
@@ -547,6 +591,7 @@ void initialize()
 		// set max variables
 		// leave name as nullptr
 		isServer = true;
+		SendMessage((char*)"Server");
 		MAX_SOCKETS = 9;
 		MAX_CONNECTIONS = MAX_SOCKETS - 1;
 	}
@@ -558,16 +603,25 @@ void initialize()
 		// set max variables
 		// get server name
 		isClient = true;
+		SendMessage((char*)"Client");
 		MAX_SOCKETS = 1;
 		MAX_CONNECTIONS = 1;
 		printf("Enter IP or URL: ");
 		serverName = (char*)malloc(80);
 		scanf("%79s", serverName);
+
+		char text[100];
+		sprintf(text, "IP: %s", serverName);
+		SendMessage(text);
 	}
 
 	// get the port
 	printf("Enter Port: ");
 	scanf("%d", &PORT);
+
+	char text[100];
+	sprintf(text, "Port: %d", PORT);
+	SendMessage(text);
 
 	// initialize SDL_Net
 	SDLNet_Init();
@@ -601,10 +655,26 @@ void initialize()
 	mySocket = SDLNet_TCP_Open(&serverIP);
 	SDLNet_TCP_AddSocket(socketSet, mySocket);
 
+	// wait so that the PORT message appears
+	Sleep(1000);
+
 	// check for any problem when trying to connect
-	if (isClient && !mySocket)
+	if (isClient)
 	{
-		printf("Failed to connect to server\n");
+		if(!mySocket)
+			SendMessage((char*)"Failed to connect");
+		else
+
+			SendMessage((char*)"Connected to server");
+	}
+
+	if (isServer)
+	{
+		if (!mySocket)
+			SendMessage((char*)"Failed to host");
+		else
+
+			SendMessage((char*)"Host ready");
 	}
 }
 
@@ -655,7 +725,7 @@ void updateNetwork()
 			// only accept a connection if there is room left on the server
 			if (clientCount < MAX_CONNECTIONS)
 			{
-				printf("Found connection\n");
+				SendMessage((char*)"Found connection");
 
 				int freeSpot = -99;
 				for (int loop = 0; loop < MAX_CONNECTIONS; loop++)

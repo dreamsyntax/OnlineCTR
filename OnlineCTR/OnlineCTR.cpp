@@ -37,7 +37,7 @@ int clientCount = 0;
 bool shutdownServer = false;
 
 // needed for all hacks
-DWORD GetProcId(const wchar_t* processName)
+DWORD GetProcId(const wchar_t* processName, DWORD desiredIndex)
 {
 	// create snapshot of PROCESS
 	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -52,15 +52,22 @@ DWORD GetProcId(const wchar_t* processName)
 		// start looping through processes
 		if (Process32First(hSnap, &procEntry))
 		{
+			int processIndex = 0;
+
 			// check if this is the right process
 			do
 			{
 				// if the name of this process is the name we are searching
 				if (!_wcsicmp(procEntry.szExeFile, processName))
 				{
-					// return this process ID
-					return procEntry.th32ProcessID;
-					break;
+					if (processIndex == desiredIndex)
+					{
+						// return this process ID
+						return procEntry.th32ProcessID;
+						break;
+					}
+
+					processIndex++;
 				}
 
 				// check the next one
@@ -456,6 +463,7 @@ MessageID
 
 // ID[0] is the server's character
 short characterIDs[8];
+short initNavData[8];
 
 // copied from here https://stackoverflow.com/questions/5891811/generate-random-number-between-1-and-3-in-c
 int roll(int min, int max)
@@ -537,8 +545,9 @@ void initialize()
 	DWORD procID = 0;
 	scanf("%d", &procID);
 
-	// auto detect the procID if the user enters 0
-	if(procID == 0) procID = GetProcId(L"ePSXe.exe");
+	// auto detect the procID if the user enters number less than 5
+	// This will act as instance index (first instance, second, etc)
+	if(procID < 10) procID = GetProcId(L"ePSXe.exe", procID);
 
 	// get the base address, relative to the module
 	baseAddress = GetModuleBaseAddress(procID, L"ePSXe.exe");
@@ -680,25 +689,24 @@ void initialize()
 
 void drawAI(int aiNumber, short netPos[3])
 {
-	// Changing the 12-byte positions will not move players
+	// Reset AI to first nav point
+	int aiX = P1xAddr - 0x354 - 0x670 * aiNumber;
+	int AddrNavData = aiX - 0x4C;
+	WriteProcessMemory(handle, (PBYTE*)AddrNavData, &initNavData[aiNumber], sizeof(short), NULL);
 
-	// Changing these values will move players, 
-	// That is just how CTR was programmed in 1999
+	// total number of nav points per path
+	// numNodesInPaths[3 * trackID + (int)pathByte]
+	
+	// how many nodes in the path to set
+	int numNavPoints = 10;
 
-	// AI[n]x = P1x - 0x354 - 0x670 * n
-	//int aiX = P1xAddr - 0x354 - 0x670 * aiNumber;
-
-	// This does not work yet, but it reads or write the pathByte that
-	// the AI is on. If we can override it, then we can control which AI is on which path
+	// Get / Set which path the AI is on (0, 1, or 2)
 	//WriteProcessMemory(handle, (PBYTE*)(aiX - 0x38), &pathByte, sizeof(pathByte), 0);
 
-	// Write to all nav points
-	// it would be nice if we could only write the nav points on the path that the AI is on,
-	// but that doesn't work, so we need to write to all nav points on all 3 paths
 
 	for (int pathByte = 0; pathByte < 3; pathByte++)
 	{
-		for (int i = 0; i < numNodesInPaths[3 * trackID + (int)pathByte]; i++)
+		for (int i = 0; i < numNavPoints; i++)
 		{
 			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 0), &netPos[0], 2, 0);
 			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 2), &netPos[1], 2, 0);
@@ -1323,7 +1331,7 @@ void getRaceData()
 					// If there is a match, then we found
 					// the navigation address
 					NavAddr[0] = min + i;
-					printf("NavAddr[0]: %p\n", min + i);
+					//printf("NavAddr[0]: %p\n", min + i);
 					break;
 				}
 
@@ -1336,10 +1344,10 @@ void getRaceData()
 	{
 		// If this fails, then you're not in a race,
 		// you're just in a boring menu
-		printf("\n");
-		printf("Failed to find NavAddr[0]\n");
-		printf("If you're in a race, there was a problem\n");
-		printf("Otherwise, ignore this\n");
+		//printf("\n");
+		//printf("Failed to find NavAddr[0]\n");
+		//printf("If you're in a race, there was a problem\n");
+		//printf("Otherwise, ignore this\n");
 		inSomeMenu = true;
 
 		// we are in a menu (assuming nothing went wrong).
@@ -1356,15 +1364,21 @@ void getRaceData()
 
 	// get the nav addresses
 	NavAddr[1] = NavAddr[0] + numNodesInPaths[3 * trackID + 0] * 20 + 0x60;
-	NavAddr[2] = NavAddr[0] + numNodesInPaths[3 * trackID + 1] * 20 + 0x60;
+	NavAddr[2] = NavAddr[1] + numNodesInPaths[3 * trackID + 1] * 20 + 0x60;
 
 	// Address of X position of Player 1
 	P1xAddr = NavAddr[0] + totalPoints * 20 + 63200;
+	//printf("P1xAddr: %p\n", P1xAddr);
 
-	// delete this after debugging
-	int aiX = P1xAddr - 0x354;
-	printf("P1xAddr: %p\n", P1xAddr);
-	printf("AIxAddr: %p\n", aiX);
+	// should happen 7 times
+	for (int i = 0; i < 1; i++)
+	{
+		int aiX = P1xAddr - 0x354 - 0x670 * i;
+		//printf("AIxAddr: %p\n", aiX);
+
+		int AddrNavData = aiX - 0x4C;
+		ReadProcessMemory(handle, (PBYTE*)AddrNavData, &initNavData[i], sizeof(short), NULL);
+	}
 
 	// Set Text
 	unsigned char title[] = "Online";
@@ -1458,17 +1472,25 @@ void updateRace()
 		small when the lap ends. If this is less
 		than (or equal to) zero, the next lap starts
 
-		Freeze1: posX - 0x1C (4 bytes)
-		Freeze2: posX - 0x48 (4 bytes)
-		Related to velocity?
+		Speed:
+		posX - 0x1C (4 bytes)
+		
+		Interpolation between nodes:
+		posX - 0x48 (4 bytes)
 
-		Path: posX - 0x38 (0, 1, or 2)
+		Path Index: 
+		posX - 0x38 (1 byte) (0, 1, or 2)
 
-		Track Progress: posX - 0x4C (2 bytes)
-		This determines if you're in 1st, 2nd, 3rd, etc.
-		This is used to trigger rotation, steering,
-		power sliding, changing color to match environment
-		(like the Coco Park tunnel)
+		Node beign Seeked ???: 
+		posX - 0x4C (2 bytes)
+
+		When locked, AI can get to the node it is seeking,
+		but it cannot progress past that node
+
+		Setting a previous value will teleport AI 
+		to the node that it was previously seeking
+
+		Try locking this during multiplayer
 	*/
 
 	// teleport extra characters under the world
@@ -1495,7 +1517,7 @@ void updateRace()
 		char introAnimState;
 		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xC81DFE), &introAnimState, sizeof(char), NULL);
 
-		printf("%d\n", introAnimState);
+		//printf("%d\n", introAnimState);
 
 		// if the intro animation is done
 		if (introAnimState == 0)

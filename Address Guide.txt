@@ -13,3 +13,6 @@ Null Address:
 PSX = 0x000
 ePSXe = ePSXe.exe + 0xA82020
 RetroArch = mednafen_psx_hw_libretro.dll + 0x818D20
+
+More Info on Gameshark codes:
+https://macrox.gshi.org/The%20Hacking%20Text.htm#playstation_code_types

@@ -1289,55 +1289,34 @@ void updateLoadingScreen()
 
 void getRaceData()
 {
-	// NavAddr1 must fall between these addresses
-	int min = baseAddress + 0xC20000;
-	int max = baseAddress + 0xC70000;
+	// We are using a pointer here
+	int expectedNavAddr;
 
-	// battle tracks have less geometry,
-	// move range back
-	if (trackID > 17)
-	{
-		min = baseAddress + 0xBE0000;
-		max = baseAddress + 0xC00000;
-	}
+	// Get value of pointer, which is address of nav data
+	ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F6A8), &expectedNavAddr, sizeof(int), NULL);
 
-	// if LOD is 3 or 4, move range
-	// back even farther (race + battle)
-	if (LevelOfDetail >= 3)
-	{
-		// Nav Addresses will be farther back
-		// because there is less geometry behind it
-		min -= 0x30000;
+	// This should only be 3 bytes large
+	expectedNavAddr = expectedNavAddr & 0xFFFFFF;
 
-		// don't push back max
-		// that way the search is extended
-	}
+	// convert PSX address to ePSXe address
+	expectedNavAddr += baseAddress + 0xA82020;
 
-	// Get Start Line Positions
-	for (int i = 0; i < max - min; ) // put nothing in the end
-	{
-		// Scan memory to see what values there are
-		short dataShort[3];
-		ReadProcessMemory(handle, (PBYTE*)(min + i + 0x0), &dataShort[0], sizeof(short), 0);
-		ReadProcessMemory(handle, (PBYTE*)(min + i + 0x2), &dataShort[1], sizeof(short), 0);
-		ReadProcessMemory(handle, (PBYTE*)(min + i + 0x4), &dataShort[2], sizeof(short), 0);
+	// Scan memory to see what values there are
+	short dataShort[3];
+	ReadProcessMemory(handle, (PBYTE*)(expectedNavAddr + 0x0), &dataShort[0], sizeof(short), 0);
+	ReadProcessMemory(handle, (PBYTE*)(expectedNavAddr + 0x2), &dataShort[1], sizeof(short), 0);
+	ReadProcessMemory(handle, (PBYTE*)(expectedNavAddr + 0x4), &dataShort[2], sizeof(short), 0);
 
-		// Check to see if the values at these addresses
-		// match the values of the first navigation point for this track
-		if (dataShort[0] == PosNav1[3 * trackID + 0])
-			if (dataShort[1] == PosNav1[3 * trackID + 1])
-				if (dataShort[2] == PosNav1[3 * trackID + 2])
-				{
-					// If there is a match, then we found
-					// the navigation address
-					NavAddr[0] = min + i;
-					//printf("NavAddr[0]: %p\n", min + i);
-					break;
-				}
-
-		// skip to next "short"
-		i += 2;
-	}
+	// Check to see if the values at these addresses
+	// match the values of the first navigation point for this track
+	if (dataShort[0] == PosNav1[3 * trackID + 0])
+		if (dataShort[1] == PosNav1[3 * trackID + 1])
+			if (dataShort[2] == PosNav1[3 * trackID + 2])
+			{
+				// If there is a match, then we found
+				// the navigation address
+				NavAddr[0] = expectedNavAddr;
+			}
 
 	// if we did not find the navigation address
 	if (NavAddr[0] == -1)
@@ -1361,6 +1340,8 @@ void getRaceData()
 		numNodesInPaths[3 * trackID + 0] +
 		numNodesInPaths[3 * trackID + 1] +
 		numNodesInPaths[3 * trackID + 2];
+
+	printf("NavAddr[0]: %p\n", NavAddr[0] - baseAddress - 0xA82020);
 
 	// get the nav addresses
 	NavAddr[1] = NavAddr[0] + numNodesInPaths[3 * trackID + 0] * 20 + 0x60;

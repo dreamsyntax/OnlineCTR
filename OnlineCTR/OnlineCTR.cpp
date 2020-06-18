@@ -36,6 +36,10 @@ int receivedByteCount = 0;
 int clientCount = 0;
 bool shutdownServer = false;
 
+// must be set to true after introAnim is 1
+bool inGame = false;
+unsigned int AddrP1 = 0;
+
 // needed for all hacks
 DWORD GetProcId(const wchar_t* processName, DWORD desiredIndex)
 {
@@ -117,317 +121,6 @@ uintptr_t GetModuleBaseAddress(DWORD procId, const wchar_t* modName)
 	return 0;
 }
 
-// First nav pos of each track
-short PosNav1[25 * 3] =
-{
-	// Crash Cove
-	62531, 677, 60843,
-
-	// Roos Tubes
-	64988, 0, 65479,
-
-	// Tiger Temple
-	56370, 64588, 61307,
-
-	// Coco Park
-	62758, 72, 60002,
-
-	// Mystery Caves
-	2053, 61, 12199,
-
-	// Blizzard Bluff
-	62558, 445, 372,
-
-	// Sewer Speedway
-	63014, 1, 368,
-
-	// Dingo Canyon
-	389, 2328, 62437,
-
-	// Papu Pyramid
-	2567, 65406, 60578,
-
-	// Dragon Mines
-	154, 1145, 1635,
-
-	// Polar Pass
-	3660, 118, 65000,
-
-	// Cortex Castle
-	712, 1, 6715,
-
-	// Tiny Arena
-	56519, 6, 1242,
-
-	// Hot Air Skyway
-	3327, 103, 64876,
-
-	// N Gin Labs
-	14009, 0, 3354,
-
-	// Oxide Station
-	7430, 308, 4665,
-
-	// Slide Coliseum
-	65370, 1, 55053,
-
-	// Turbo Track
-	5666, 8, 2259,
-
-	// Nitro Court
-	368, 0, 392,
-
-	// Rampage Ruins
-	60103, 447, 63985,
-
-	// Parking Lot
-	65392, 1, 442,
-
-	// Skull Rock
-	63334, 47, 1837,
-
-	// North Bowl
-	51, 1, 64764,
-
-	// Rocky Road
-	393, 767, 64128,
-
-	// Lab Basement
-	1232, 1, 4610,
-};
-
-// the number of nodes in each path
-// there are 3 paths on each track
-short numNodesInPaths[25 * 3] =
-{
-	// Crash Cove Path 1
-	227,
-
-	// Crash Cove Path 2
-	239,
-
-	// Crash Cove Path 3
-	239,
-
-	// Roos Tubes Path 1
-	239,
-
-	// Roos Tubes Path 2
-	234,
-
-	// Roos Tubes Path 3
-	231,
-
-	// Tiger Temple Path 1
-	309,
-
-	// Tiger Temple Path 2
-	312,
-
-	// Tiger Temple Path 3
-	328,
-
-	// Coco Park Path 1
-	207,
-
-	// Coco Park Path 2
-	223,
-
-	// Coco Park Path 3
-	232,
-
-	// Mystery Caves Path 1
-	387,
-
-	// Mystery Caves Path 2
-	376,
-
-	// Mystery Caves Path 3
-	408,
-
-	// Blizzard Bluff Path 1
-	254,
-
-	// Blizzard Bluff Path 2
-	250,
-
-	// Blizzard Bluff Path 3
-	283,
-
-	// Sewer Speedway Path 1
-	365,
-
-	// Sewer Speedway Path 2
-	369,
-
-	// Sewer Speedway Path 3
-	327,
-
-	// Dingo Canyon Path 1
-	269,
-
-	// Dingo Canyon Path 2
-	247,
-
-	// Dingo Canyon Path 3
-	246,
-
-	// Papu Pyramid Path 1
-	287,
-
-	// Papu Pyramid Path 2
-	277,
-
-	// Papu Pyramid Path 3
-	292,
-
-	// Dragon Mines Path 1
-	268,
-
-	// Dragon Mines Path 2
-	272,
-
-	// Dragon Mines Path 3
-	285,
-
-	// Polar Pass Path 1
-	520,
-
-	// Polar Pass Path 2
-	516,
-
-	// Polar Pass Path 3
-	511,
-
-	// Cortex Castle Path 1
-	420,
-
-	// Cortex Castle Path 2
-	398,
-
-	// Cortex Castle Path 3
-	412,
-
-	// Tiny Arena Path 1
-	660,
-
-	// Tiny Arena Path 2
-	632,
-
-	// Tiny Arena Path 3
-	656,
-
-	// Hot Air Skyway Path 1
-	520,
-
-	// Hot Air Skyway Path 2
-	512,
-
-	// Hot Air Skyway Path 3
-	504,
-
-	// N Gin Labs Path 1
-	440,
-
-	// N Gin Labs Path 2
-	422,
-
-	// N Gin Labs Path 3
-	405,
-
-	// Oxide Station Path 1
-	648,
-
-	// Oxide Station Path 2
-	626,
-
-	// Oxide Station Path 3
-	635,
-
-	// Slide Coliseum Path 1
-	328,
-
-	// Slide Coliseum Path 2
-	309,
-
-	// Slide Coliseum Path 3
-	329,
-
-	// Turbo Track Path 1
-	299,
-
-	// Turbo Track Path 2
-	313,
-
-	// Turbo Track Path 3
-	341,
-
-	// ============ WIP ===========
-
-	// Nitro Court Path 1
-	0,
-
-	// Nitro Court Path 2
-	0,
-
-	// Nitro Court Path 3
-	0,
-
-	// Rampage Ruins Path 1
-	140,
-
-	// Rampage Ruins Path 2
-	187,
-
-	// Rampage Ruins Path 3
-	169,
-
-	// Parking Lot Path 1
-	196,
-
-	// Parking Lot Path 2
-	98,
-
-	// Parking Lot Path 3
-	124,
-
-	// Skull Rock Path 1
-	102,
-
-	// Skull Rock Path 2
-	79,
-
-	// Skull Rock Path 3
-	197,
-
-	// North Bowl Path 1
-	127,
-
-	// North Bowl Path 2
-	175,
-
-	// North Bowl Path 3
-	204,
-
-	// Rocky Road Path 1
-	107,
-
-	// Rocky Road Path 2
-	70,
-
-	// Rocky Road Path 3
-	126,
-
-	// Lab Basement Path 1
-	101,
-
-	// Lab Basement Path 2
-	65,
-
-	// Lab Basement Path 3
-	64,
-};
-
 unsigned char gameStateCurr; // 0x161A871
 unsigned char weaponPrev; // relative to posX
 unsigned char weaponCurr; // relative to posX
@@ -436,13 +129,8 @@ unsigned char trackVideoID; // 0x16379C8
 unsigned char LevelOfDetail; // 0xB0F85C
 unsigned long long menuState;
 
-unsigned int P1xAddr = -1;
-unsigned int NavAddr[3];
-
 bool isServer = false;
 bool isClient = false;
-bool inRace = false;
-bool inSomeMenu = false;
 bool pauseUntilSync = false;
 
 // used by server only
@@ -536,7 +224,7 @@ void initialize()
 
 	printf("Step 1: Open ePSXe.exe\n");
 	printf("Step 2: Open Crash Team Racing SCUS_94426\n");
-	printf("Step 3: Go to character selection\n");
+	printf("Step 3: Go to track selection\n");
 	printf("\n");
 	printf("Step 4: Enter ProcessID below\n");
 	printf("For auto-detection, enter 0\n\n");
@@ -685,34 +373,48 @@ void initialize()
 
 			SendMessage((char*)"Host ready");
 	}
+
+	system("cls\n");
+
+	if (isServer)
+	{
+		printf("Press F9, then Up, for Battle Maps\n");
+		printf("Press F10 for random track\n");
+	}
+
+	if (isClient)
+		printf("Sit still, your menu will sync with the server\n");
+
+	// disable parts of AI in the EXE (in RAM)
+	int zero = 0;
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &zero, sizeof(int), NULL);
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &zero, sizeof(int), NULL);
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA975B4), &zero, sizeof(int), NULL);
+
+	// Ja ra, return asm, 
+	// disable weapons for players and enemies
+	int jaRa = 0x3e00008;
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x6540C), &jaRa, sizeof(int), NULL);
 }
 
-void drawAI(int aiNumber, short netPos[3])
+void drawAI(int aiNumber, unsigned int netPos[3])
 {
-	// Reset AI to first nav point
-	int aiX = P1xAddr - 0x354 - 0x670 * aiNumber;
-	int AddrNavData = aiX - 0x4C;
-	WriteProcessMemory(handle, (PBYTE*)AddrNavData, &initNavData[aiNumber], sizeof(short), NULL);
+	unsigned int AddrAI = AddrP1;
+	AddrAI -= 0x670 * (aiNumber + 1);
 
-	// total number of nav points per path
-	// numNodesInPaths[3 * trackID + (int)pathByte]
-	
-	// how many nodes in the path to set
-	int numNavPoints = 10;
+	// This stops the AI from proceding with the NAV system,
+	// but with this, the AI's values still get set to the 
+	// values that the NAV system wants the AI to have at the starting line
+	int _30 = 30;
+	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x604), &_30, sizeof(int), NULL);
 
-	// Get / Set which path the AI is on (0, 1, or 2)
-	//WriteProcessMemory(handle, (PBYTE*)(aiX - 0x38), &pathByte, sizeof(pathByte), 0);
+	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x2d4), &netPos[0], sizeof(int), NULL);
+	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x2d8), &netPos[1], sizeof(int), NULL);
+	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x2dC), &netPos[2], sizeof(int), NULL);
 
-
-	for (int pathByte = 0; pathByte < 3; pathByte++)
-	{
-		for (int i = 0; i < numNavPoints; i++)
-		{
-			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 0), &netPos[0], 2, 0);
-			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 2), &netPos[1], 2, 0);
-			WriteProcessMemory(handle, (PBYTE*)(NavAddr[(int)pathByte] + (i * 0x14) + 4), &netPos[2], 2, 0);
-		}
-	}
+	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x5f0), &netPos[0], sizeof(int), NULL);
+	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x5f4), &netPos[1], sizeof(int), NULL);
+	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x5f8), &netPos[2], sizeof(int), NULL);
 }
 
 void updateNetwork()
@@ -790,10 +492,10 @@ void updateNetwork()
 					if (messageID == 3)
 					{
 						// This holds the position you get from network
-						short netPos[3];
+						unsigned int netPos[3];
 
 						// Get online player's position from the network message
-						if (sscanf(recvBuf, "%d %d %d %d", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
+						if (sscanf(recvBuf, "%d %u %u %u", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
 						{
 							// draw the first AI (index = 0)
 							// at the position that we get
@@ -984,6 +686,12 @@ void updateNetwork()
 					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CE), &two, sizeof(char), 0);
 					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379D0), &one, sizeof(char), 0);
 
+					// Reset game frame counter to zero
+					int zero = 0;
+					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x96B20 + 0x1cec), &zero, sizeof(int), 0);
+
+					inGame = false;
+
 					// This message will include number of players
 					// and array of characterIDs, save it for later
 					// Stop looking for messages until later
@@ -993,10 +701,10 @@ void updateNetwork()
 				if (messageID == 3)
 				{
 					// This holds the position you get from network
-					short netPos[3];
+					unsigned int netPos[3];
 
 					// Get online player's position from the network message
-					if (sscanf(recvBuf, "%d %d %d %d", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
+					if (sscanf(recvBuf, "%d %u %u %u", &messageID, &netPos[0], &netPos[1], &netPos[2]) == 4)
 					{
 						// draw the first AI (index = 0)
 						// at the position that we get
@@ -1199,11 +907,11 @@ void SyncPlayersInMenus()
 				// server is not ready to race
 				serverSynced = false;
 
-				// start the race, tell all clients to start
-				P1xAddr = -1;
-				NavAddr[0] = -1;
-				NavAddr[1] = -1;
-				NavAddr[2] = -1;
+				// Reset game frame counter to zero
+				int zero = 0;
+				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x96B20 + 0x1cec), &zero, sizeof(int), 0);
+
+				inGame = false;
 
 				//printf("Sending to clients: Start Race with X amount of players and Array of characters\n");
 
@@ -1246,10 +954,6 @@ void SyncPlayersInMenus()
 
 void updateTrackSelection()
 {
-	// reset variables because we are not in race
-	P1xAddr = -1;
-	inRace = false;
-
 	// Play as Oxide if you press F11
 	if (GetAsyncKeyState(VK_F11))
 	{
@@ -1267,10 +971,6 @@ void updateTrackSelection()
 
 void updateLoadingScreen()
 {
-	// reset variable
-	inRace = false;
-	inSomeMenu = false;
-
 	// reset messages
 	memset(recvBuf, 0, BUFFER_SIZE);
 	memset(sendBuf, 0, BUFFER_SIZE);
@@ -1287,89 +987,6 @@ void updateLoadingScreen()
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &LevelOfDetail, sizeof(LevelOfDetail), 0);
 }
 
-void getRaceData()
-{
-	// We are using a pointer here
-	int expectedNavAddr;
-
-	// Get value of pointer, which is address of nav data
-	ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F6A8), &expectedNavAddr, sizeof(int), NULL);
-
-	// This should only be 3 bytes large
-	expectedNavAddr = expectedNavAddr & 0xFFFFFF;
-
-	// convert PSX address to ePSXe address
-	expectedNavAddr += baseAddress + 0xA82020;
-
-	// Scan memory to see what values there are
-	short dataShort[3];
-	ReadProcessMemory(handle, (PBYTE*)(expectedNavAddr + 0x0), &dataShort[0], sizeof(short), 0);
-	ReadProcessMemory(handle, (PBYTE*)(expectedNavAddr + 0x2), &dataShort[1], sizeof(short), 0);
-	ReadProcessMemory(handle, (PBYTE*)(expectedNavAddr + 0x4), &dataShort[2], sizeof(short), 0);
-
-	// Check to see if the values at these addresses
-	// match the values of the first navigation point for this track
-	if (dataShort[0] == PosNav1[3 * trackID + 0])
-		if (dataShort[1] == PosNav1[3 * trackID + 1])
-			if (dataShort[2] == PosNav1[3 * trackID + 2])
-			{
-				// If there is a match, then we found
-				// the navigation address
-				NavAddr[0] = expectedNavAddr;
-			}
-
-	// if we did not find the navigation address
-	if (NavAddr[0] == -1)
-	{
-		// If this fails, then you're not in a race,
-		// you're just in a boring menu
-		//printf("\n");
-		//printf("Failed to find NavAddr[0]\n");
-		//printf("If you're in a race, there was a problem\n");
-		//printf("Otherwise, ignore this\n");
-		inSomeMenu = true;
-
-		// we are in a menu (assuming nothing went wrong).
-		// Lets leave the function, since the rest of the
-		// function is only for races
-		return;
-	}
-
-	// calculate how many total nav points there are
-	int totalPoints =
-		numNodesInPaths[3 * trackID + 0] +
-		numNodesInPaths[3 * trackID + 1] +
-		numNodesInPaths[3 * trackID + 2];
-
-	printf("NavAddr[0]: %p\n", NavAddr[0] - baseAddress - 0xA82020);
-
-	// get the nav addresses
-	NavAddr[1] = NavAddr[0] + numNodesInPaths[3 * trackID + 0] * 20 + 0x60;
-	NavAddr[2] = NavAddr[1] + numNodesInPaths[3 * trackID + 1] * 20 + 0x60;
-
-	// Address of X position of Player 1
-	P1xAddr = NavAddr[0] + totalPoints * 20 + 63200;
-	//printf("P1xAddr: %p\n", P1xAddr);
-
-	// should happen 7 times
-	for (int i = 0; i < 1; i++)
-	{
-		int aiX = P1xAddr - 0x354 - 0x670 * i;
-		//printf("AIxAddr: %p\n", aiX);
-
-		int AddrNavData = aiX - 0x4C;
-		ReadProcessMemory(handle, (PBYTE*)AddrNavData, &initNavData[i], sizeof(short), NULL);
-	}
-
-	// Set Text
-	unsigned char title[] = "Online";
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3EC79), &title, 6, 0);
-
-	// we are definitely in a race
-	// inRace lets us teleport AIs to the proper positions
-	inRace = true;
-}
-
 void throwExtrasToVoid()
 {
 	// In a 2-player game, there is one player over network
@@ -1379,31 +996,22 @@ void throwExtrasToVoid()
 	for (int i = numberOfNetworkPlayers; i < 7; i++)
 	{
 		int Gone = 99999999;
-		int aiX = P1xAddr - 0x354 - 0x670 * i;
+
+		unsigned int AddrAI = AddrP1;
+		AddrAI -= 0x670 * (i + 1);
+
+		int one = 1;
+		WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x604), &one, sizeof(int), NULL);
 
 		// Teleport them all under the track.
 		// You can try changing X and Z, but they'll just warp back to spawn.
 		// Only height goes into effect, which is all we need.
-		WriteProcessMemory(handle, (PBYTE*)(aiX + 0), &Gone, sizeof(int), 0);
-		WriteProcessMemory(handle, (PBYTE*)(aiX + 4), &Gone, sizeof(int), 0);
-		WriteProcessMemory(handle, (PBYTE*)(aiX + 8), &Gone, sizeof(int), 0);
+		WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x2d8), &Gone, sizeof(int), 0);
+		WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x5f4), &Gone, sizeof(int), 0);
 	}
 }
 
-void disableWeapons()
-{
-	// Get Current and Previous weapon state
-	weaponPrev = weaponCurr;
-	ReadProcessMemory(handle, (PBYTE*)(P1xAddr - 0x29E), &weaponCurr, sizeof(char), 0);
 
-	// If you were cycling through weapons, then stopped
-	if (weaponPrev == 0x10 && weaponCurr != 0x10)
-	{
-		// Set weapon to null, so nobody uses weapons
-		char NoWeapon = 0xF;
-		WriteProcessMemory(handle, (PBYTE*)(P1xAddr - 0x29E), &NoWeapon, sizeof(char), 0);
-	}
-}
 
 void preparePositionMessage()
 {
@@ -1412,73 +1020,21 @@ void preparePositionMessage()
 	// Changing those coordinates will not move
 	// the players. 
 	unsigned int rawPosition[3];
-	ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x0), &rawPosition[0], sizeof(int), 0);
-	ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x4), &rawPosition[1], sizeof(int), 0);
-	ReadProcessMemory(handle, (PBYTE*)(P1xAddr + 0x8), &rawPosition[2], sizeof(int), 0);
-
-	// Divide by 256, bit shifting reduces bytes
-	// from 4 bytes to 2 bytes. This will be the
-	// coordinate system that we set players to.
-	short compressPos[3];
-	compressPos[0] = rawPosition[0] / 256;
-	compressPos[1] = rawPosition[1] / 256;
-	compressPos[2] = rawPosition[2] / 256;
+	ReadProcessMemory(handle, (PBYTE*)(AddrP1 + 0x2D4), &rawPosition[0], sizeof(int), 0);
+	ReadProcessMemory(handle, (PBYTE*)(AddrP1 + 0x2D8), &rawPosition[1], sizeof(int), 0);
+	ReadProcessMemory(handle, (PBYTE*)(AddrP1 + 0x2DC), &rawPosition[2], sizeof(int), 0);
 
 	// Server sends to client
 	// Client sends to server
 	// 3 means Position Message
 	memset(sendBuf, 0, BUFFER_SIZE);
-	sendLength = sprintf(sendBuf, "3 %d %d %d", compressPos[0], compressPos[1], compressPos[2]);
+	sendLength = sprintf(sendBuf, "3 %u %u %u", rawPosition[0], rawPosition[1], rawPosition[2]);
 }
 
 void updateRace()
 {	
-	// Player 1
-	/*
-		rotX = posX + 0x96 (only for P1)
-		rotY = posX + 0xC6 (only for P1)
-		There is no RotZ (gimbal lock)
-		DistanceToFinish: posX + 0x1B4
-		Weapon: posX - 0x29E
-	*/
-
-	// AI
-	/*
-		int ai_posX = P1xAddr - 0x354 - 0x670 * i;
-		i = 0,1,2,3,4,5,6
-		for all 7 AIs in the game
-
-		DistanceToFinish: posX - 0x168 (4 bytes)
-		This is large when the lap starts and
-		small when the lap ends. If this is less
-		than (or equal to) zero, the next lap starts
-
-		Speed:
-		posX - 0x1C (4 bytes)
-		
-		Interpolation between nodes:
-		posX - 0x48 (4 bytes)
-
-		Path Index: 
-		posX - 0x38 (1 byte) (0, 1, or 2)
-
-		Node beign Seeked ???: 
-		posX - 0x4C (2 bytes)
-
-		When locked, AI can get to the node it is seeking,
-		but it cannot progress past that node
-
-		Setting a previous value will teleport AI 
-		to the node that it was previously seeking
-
-		Try locking this during multiplayer
-	*/
-
 	// teleport extra characters under the world
 	throwExtrasToVoid();
-
-	// make sure none of the players have weapons
-	disableWeapons();
 
 	// set controller mode to 1P mode, disable error message
 	// The message gets enabled lower in the code
@@ -1497,8 +1053,6 @@ void updateRace()
 		// becomes 0 when traffic lights should show
 		char introAnimState;
 		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xC81DFE), &introAnimState, sizeof(char), NULL);
-
-		//printf("%d\n", introAnimState);
 
 		// if the intro animation is done
 		if (introAnimState == 0)
@@ -1578,10 +1132,11 @@ int main(int argc, char **argv)
 	initialize();
 
 	// Main loop...
-	do
+	while(true)
 	{
-		// 60fps means 16ms per frame, sleep for 2ms so that network is not clogged
-		Sleep(2);
+		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x9900C), &AddrP1, sizeof(AddrP1), NULL);
+		AddrP1 -= 0x80000000;
+		AddrP1 += baseAddress + 0xA82020;
 
 		// handle all message reading and writing
 		updateNetwork();
@@ -1617,40 +1172,26 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		// State 10 is when you're in a menu, or the intro cutscene of a race
-		// State 11 is the whole race, including traffic lights
 
-		// In menus, first frame is 10
-		// In regular tracks, first frame is 10 (intro cutscene)
-		// In battle tracks, first frame is 11 (traffic lights)
+
+		// Read Game Timer
+		int timer = 0;
+		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x96B20 + 0x1cec), &timer, sizeof(int), 0);
 
 		if (
-			// if you're in a race (or maybe menu)
-			(gameStateCurr == 11 || gameStateCurr == 10) 
-			&& 
-			// these are set to true, after checking for race data.
-			// So, if you haven't already checked for data yet
-			(!inRace && !inSomeMenu)
+			timer > 10 &&
+
+			(gameStateCurr == 11 || gameStateCurr == 10)
 			)
 		{
-			// Check for data
-			// This will determine if you are in a menu, or if you are in a race. 
-			// It will also set the inRace and inSomeMenu booleans. I will make
-			// a better way of determining one from the other, in the future
-			getRaceData();
+			inGame = true;
 		}
 
-		// This is true when the nav points are found
-		if (inRace)
+		if (inGame)
 		{
-			// this is called when you're
-			// in the intro cutscene, or 
-			// waiting for traffic lights,
-			// or actually racing
 			updateRace();
 		}
-
-	} while (shutdownServer == false); // End of main loop
+	}
 
 	// delete everything we initialized
 	SDLNet_FreeSocketSet(socketSet);

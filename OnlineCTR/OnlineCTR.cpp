@@ -383,7 +383,7 @@ void initialize()
 	}
 
 	if (isClient)
-		printf("Sit still, your menu will sync with the server\n");
+		printf("Sit still, your menu syncs with the server\n");
 
 	// disable parts of AI in the EXE (in RAM)
 	int zero = 0;
@@ -803,13 +803,26 @@ void SyncPlayersInMenus()
 	// CharacterID[i] : 0x1608EA4 + 2 * i
 	ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &characterIDs[0], sizeof(short), 0);
 
+	// check if lapRowSelector is open
+	bool lapRowSelectorOpen = false;
+	ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &lapRowSelectorOpen, sizeof(lapRowSelectorOpen), 0);
+
+	// Dont get stuck with Waiting for players...
+	if (!lapRowSelectorOpen)
+	{
+		// If you are not waiting any more, then you must be synced,
+		// wow I need to rename these
+		pauseUntilSync = false;
+		waitingForClient = false;
+		serverSynced = false;
+
+		char _1 = 1;
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+	}
+
 	// if you are the server
 	if (isServer)
 	{
-		// check if lapRowSelector is open
-		bool lapRowSelectorOpen = false;
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &lapRowSelectorOpen, sizeof(lapRowSelectorOpen), 0);
-
 		// if lap selector is closed
 		if (!lapRowSelectorOpen)
 		{
@@ -950,27 +963,6 @@ void SyncPlayersInMenus()
 		// Get the new Track ID
 		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackID, sizeof(trackID), 0);
 	}
-}
-
-void updateTrackSelection()
-{
-	// Play as Oxide if you press F11
-	/*if (GetAsyncKeyState(VK_F11))
-	{
-		// set character ID to 15
-		char _15 = 15;
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &_15, sizeof(_15), 0);
-	}*/
-
-	// copy server menu state to client, and exchange character info
-	SyncPlayersInMenus();
-
-	// determine LOD to prevent crashes
-	CalculateLOD();
-
-	pauseUntilSync = false;
-	waitingForClient = false;
-	serverSynced = false;
 }
 
 void updateLoadingScreen()
@@ -1152,11 +1144,26 @@ int main(int argc, char **argv)
 		// if you're in the track selection menu
 		if (inTrackSelection)
 		{
-			updateTrackSelection();
+			// copy server menu state to client, and exchange character info
+			SyncPlayersInMenus();
+
+			// determine LOD to prevent crashes
+			CalculateLOD();
+
+			// 1000 ms per second
+			// 1/1000 second
+			// prevent network spam
+			// without missing a message
+			Sleep(1);
 
 			// Restart the loop, don't proceed
 			continue;
 		}
+
+		// If you aren't in track selection,
+		// spam less, to reduce chance of network lag,
+		// messages are larger in gameplay
+		Sleep(20);
 
 		// GameState
 		// 2 = loading screen

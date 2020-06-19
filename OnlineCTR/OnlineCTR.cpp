@@ -222,11 +222,12 @@ void initialize()
 	// Initialize random number generator
 	srand(time(NULL));
 
-	printf("Step 1: Open ePSXe.exe\n");
+	printf("Step 1: Open ePSXe 2.0.5 on Windows\n");
 	printf("Step 2: Open Crash Team Racing SCUS_94426\n");
-	printf("Step 3: Go to track selection\n");
+	printf("Step 3: Go to character selection\n");
+	printf("Step 4: Save a state (F1), then load it (F3)\n");
 	printf("\n");
-	printf("Step 4: Enter ProcessID below\n");
+	printf("Step 5: Enter ProcessID below\n");
 	printf("For auto-detection, enter 0\n\n");
 	printf("Enter: ");
 
@@ -263,12 +264,13 @@ void initialize()
 	}
 
 	// welcome the player
-	SendMessage((char*)"OnlineCTR");
+	//SendMessage((char*)"OnlineCTR");
 
 	// Unlock all cars and tracks immediately
 	UnlockPlayersAndTracks();
 	
-	printf("\nStep 5: Configure Network\n");
+	system("cls");
+	printf("\nStep 6: Configure Network\n");
 
 	int choice = 0;
 	printf("1: Server\n");
@@ -288,7 +290,7 @@ void initialize()
 		// set max variables
 		// leave name as nullptr
 		isServer = true;
-		SendMessage((char*)"Server");
+		//SendMessage((char*)"Server");
 		MAX_SOCKETS = 9;
 		MAX_CONNECTIONS = MAX_SOCKETS - 1;
 	}
@@ -300,7 +302,7 @@ void initialize()
 		// set max variables
 		// get server name
 		isClient = true;
-		SendMessage((char*)"Client");
+		//SendMessage((char*)"Client");
 		MAX_SOCKETS = 1;
 		MAX_CONNECTIONS = 1;
 		printf("Enter IP or URL: ");
@@ -309,7 +311,7 @@ void initialize()
 
 		char text[100];
 		sprintf(text, "IP: %s", serverName);
-		SendMessage(text);
+		//SendMessage(text);
 	}
 
 	// get the port
@@ -318,7 +320,7 @@ void initialize()
 
 	char text[100];
 	sprintf(text, "Port: %d", PORT);
-	SendMessage(text);
+	//SendMessage(text);
 
 	// initialize SDL_Net
 	SDLNet_Init();
@@ -355,37 +357,45 @@ void initialize()
 	// wait so that the PORT message appears
 	Sleep(1000);
 
+	system("cls\n");
+
 	// check for any problem when trying to connect
 	if (isClient)
 	{
 		if(!mySocket)
-			SendMessage((char*)"Failed to connect");
+			printf("Failed to connect\n");
 		else
 
-			SendMessage((char*)"Connected to server");
+			printf("Connected to server\n");
 	}
 
 	if (isServer)
 	{
 		if (!mySocket)
-			SendMessage((char*)"Failed to host");
+			printf("Failed to host\n");
 		else
 
-			SendMessage((char*)"Host ready");
+			printf("Host ready\n");
 	}
-
-	system("cls\n");
 
 	if (isServer)
 	{
+		printf("Choose a character, and then\n");
+		printf("wait for all players to enter the\n");
+		printf("track selection menu before starting\n");
+		printf("the race. Ask everyone if they are ready\n");
+		printf("\n");
 		printf("Press F9, then Up, for Battle Maps\n");
 		printf("Press F10 for random track\n");
 	}
 
 	if (isClient)
-		printf("Sit still, your menu syncs with the server\n");
+	{
+		printf("Choose a character, and then\n");
+		printf("sit still, your menu syncs with the server\n");
+	}
 
-	// disable parts of AI in the EXE (in RAM)
+	// Stop AI system from writing position data
 	int zero = 0;
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &zero, sizeof(int), NULL);
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &zero, sizeof(int), NULL);
@@ -395,6 +405,15 @@ void initialize()
 	// disable weapons for players and enemies
 	int jaRa = 0x3e00008;
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x6540C), &jaRa, sizeof(int), NULL);
+
+	// Patch the first if-statement of FUN_8003282c
+	// Allow 4 characters to load in high LOD
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB4860), &zero, sizeof(int), NULL);
+
+	short HighMpk = 0x00F2;
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB48A8), &HighMpk, sizeof(short), NULL);
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB48C4), &HighMpk, sizeof(short), NULL);
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB48E0), &HighMpk, sizeof(short), NULL);
 }
 
 void drawAI(int aiNumber, unsigned int netPos[3])
@@ -435,7 +454,7 @@ void updateNetwork()
 			// only accept a connection if there is room left on the server
 			if (clientCount < MAX_CONNECTIONS)
 			{
-				SendMessage((char*)"Found connection");
+				printf("Found connection\n");
 
 				int freeSpot = -99;
 				for (int loop = 0; loop < MAX_CONNECTIONS; loop++)
@@ -739,59 +758,60 @@ void updateNetwork()
 	}
 }
 
-void CalculateLOD()
-{
-	// Set LOD to 1 by default
-	LevelOfDetail = 1;
-
-	// if network player is using someone
-	// who is an unlockable character,
-	// not part of original 8
-	if (characterIDs[1] > 7)
-	{
-		// if both the server and client are playing
-		// as the same unlocked character, then LOD
-		// does not need to change
-		if (characterIDs[0] != characterIDs[1])
-		{
-			// Drop LOD to 3
-			LevelOfDetail = 3;
-		}
-	}
-
-	// If the net player is an original player, 
-	// then choose if LOD should drop depending on Oxide
-	else
-	{
-		// if you are playing as Oxide
-		if (characterIDs[0] == 15)
-		{
-			// if you're choosing a track where LOD needs to drop
-			if (
-				trackID == 4 ||	// Mystery Caves
-				trackID == 10 ||// Polar Pass
-				trackID == 11 ||// Cortex Castle
-				trackID == 13 ||// Hot Air Skyway
-				trackID == 14 ||// N Gin Labs
-				trackID == 15	// Oxide Station
-				)
-			{
-				// Set LOD to 2
-				LevelOfDetail = 2;
-			}
-		}
-	}
-
-	// Set the Level of Detail
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &LevelOfDetail, sizeof(LevelOfDetail), 0);
-}
-
 void SendOnlinePlayersToRAM()
 {
+	int numOnlinePlayers = 1;
+
+	int i = 1;
+
 	// put network characters into RAM
-	for (int i = 1; i < 2; i++)
+	for (i; i < numOnlinePlayers + 1; i++)
 	{
 		char oneByte = (char)characterIDs[i];
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2 * i), &oneByte, 1, 0); // 4, for 2 shorts
+	}
+
+	// If you have less than 4 human drivers
+	if (i < 4)
+	{
+		// load random other characters,
+		// so that icons aren't confused with humans
+		for (i; i < 4; i++)
+		{
+			char oneByte = 0;
+
+			// find the first ID that is not loaded yet
+			for (int j = 0; j < 8; j++)
+			{
+				bool found = true;
+
+				// compare each j to each already-loaded characterID
+				for (int k = 0; k < i; k++)
+				{
+					// if the character is already loaded
+					if (characterIDs[k] == j)
+					{
+						found = false;
+						k = 8;
+					}
+				}
+
+				// if the character is not loaded
+				if (found)
+				{
+					oneByte = j;
+					j = 8;
+				}
+			}
+
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2 * i), &oneByte, 1, 0); // 4, for 2 shorts
+		}
+	}
+
+	// set the rest of the characters to the ID of P1
+	for (i; i < 8; i++)
+	{
+		char oneByte = (char)characterIDs[0];
 		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2 * i), &oneByte, 1, 0); // 4, for 2 shorts
 	}
 }
@@ -965,24 +985,6 @@ void SyncPlayersInMenus()
 	}
 }
 
-void updateLoadingScreen()
-{
-	// reset messages
-	memset(recvBuf, 0, BUFFER_SIZE);
-	memset(sendBuf, 0, BUFFER_SIZE);
-
-	// constantly write these values,
-	// to make sure the right characters are loaded
-	SendOnlinePlayersToRAM();
-
-	// dont call CalculateLOD becasue there
-	// is no way it can change during loading screen,
-	// characters and tracks are already chosen
-
-	// Set the Level of Detail
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F85C), &LevelOfDetail, sizeof(LevelOfDetail), 0);
-}
-
 void throwExtrasToVoid()
 {
 	// In a 2-player game, there is one player over network
@@ -1147,9 +1149,6 @@ int main(int argc, char **argv)
 			// copy server menu state to client, and exchange character info
 			SyncPlayersInMenus();
 
-			// determine LOD to prevent crashes
-			CalculateLOD();
-
 			// 1000 ms per second
 			// 1/1000 second
 			// prevent network spam
@@ -1176,8 +1175,13 @@ int main(int argc, char **argv)
 		// when you're in the loading screen
 		if (gameStateCurr == 2)
 		{
-			// handle characters and LODs
-			updateLoadingScreen();
+			// reset messages
+			memset(recvBuf, 0, BUFFER_SIZE);
+			memset(sendBuf, 0, BUFFER_SIZE);
+
+			// constantly write these values,
+			// to make sure the right characters are loaded
+			SendOnlinePlayersToRAM();
 
 			// restart the loop
 			continue;

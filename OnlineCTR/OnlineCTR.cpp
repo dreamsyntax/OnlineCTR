@@ -955,18 +955,22 @@ void SyncPlayersInMenus()
 void updateTrackSelection()
 {
 	// Play as Oxide if you press F11
-	if (GetAsyncKeyState(VK_F11))
+	/*if (GetAsyncKeyState(VK_F11))
 	{
 		// set character ID to 15
 		char _15 = 15;
 		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &_15, sizeof(_15), 0);
-	}
+	}*/
 
 	// copy server menu state to client, and exchange character info
 	SyncPlayersInMenus();
 
 	// determine LOD to prevent crashes
 	CalculateLOD();
+
+	pauseUntilSync = false;
+	waitingForClient = false;
+	serverSynced = false;
 }
 
 void updateLoadingScreen()

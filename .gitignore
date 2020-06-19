@@ -1,4 +1,6 @@
 # Root Folders
 .vs/
-OnlineCTR/x64/
-x64/
+Binaries/OnlineCTR.iobj
+Binaries/OnlineCTR.ipdb
+Binaries/OnlineCTR.pdb
+Junk

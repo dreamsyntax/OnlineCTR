@@ -1139,9 +1139,71 @@ int main(int argc, char **argv)
 		// handle all message reading and writing
 		updateNetwork();
 
+		short inCharSelection = 0;
+		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F928), &inCharSelection, sizeof(inCharSelection), NULL);
+
+		// if you are in character selection menu
+		if (inCharSelection == 18100)
+		{
+			char f = 0xF;
+			char _80 = 0x80;
+			char _C0 = 0xC0;
+			
+			// Write array of icon ids
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0xb50d2), &f, sizeof(f), NULL);
+
+			// Change Pura Nav to go "down" to Oxide
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36EF9), &f, sizeof(f), NULL);
+
+			// Change Papu Nav to go "down" to Oxide
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F29), &f, sizeof(f), NULL);
+
+			// Move Komodo Joe
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F30), &_80, sizeof(_80), NULL);
+
+			// Move Penta Penguin
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F3C), &_C0, sizeof(_C0), NULL);
+
+			// Move Fake Crash, change nav to point to oxide
+			char fakeCrashData[8] = { 0x00, 0x01, 0xAE, 0x00, 0x06, 0x0E, 0x0D, 0x0F };
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F48), &fakeCrashData[0], 8, NULL);
+
+			// Change 3P's Crash Icon to 1P's Oxide Icon
+			char oxideData[10] = { 0x40, 0x01, 0xAE, 0x00, 0x07, 0x0F, 0x0E, 0x0B, 0x0F, 0x00 };
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F54), &oxideData[0], 10, NULL);
+
+			char _10 = 0x10; 
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB30544), &_10, 1, NULL);
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB313B8), &_10, 1, NULL);
+			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB317E4), &_10, 1, NULL);
+
+			char a;
+			char b;
+			char c;
+			char d;
+			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &a, 1, NULL);
+			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB37A10), &b, 1, NULL);
+			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB37A18), &c, 1, NULL);
+			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xC81EC8), &d, 1, NULL);
+
+			if (a == 15 || b == 15 || c == 15 || d == 15)
+			{
+				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36D65), &_10, 1, NULL);
+			}
+
+			else
+			{
+				char d0d = 0;
+				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36D65), &d0d, 1, NULL);
+			}
+
+			Sleep(1);
+			continue;
+		}
+
 		// Check to see if you are in the track selection menu
 		bool inTrackSelection = false;
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F8AC), &inTrackSelection, sizeof(inTrackSelection), 0);
+		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F8AC), &inTrackSelection, sizeof(inTrackSelection), NULL);
 
 		// if you're in the track selection menu
 		if (inTrackSelection)

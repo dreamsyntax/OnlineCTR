@@ -210,6 +210,40 @@ void UnlockPlayersAndTracks()
 	// so by setting all bits to 1, it unlocks everything
 }
 
+int aiNavBackup[3] = { 0,0,0 };
+
+void EnableAI()
+{
+	if (aiNavBackup[0] != 0)
+	{
+		// restore ASM so AI can take over
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &aiNavBackup[0], sizeof(int), NULL);
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &aiNavBackup[1], sizeof(int), NULL);
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA975B4), &aiNavBackup[2], sizeof(int), NULL);
+
+		aiNavBackup[0] = 0;
+		aiNavBackup[1] = 0;
+		aiNavBackup[2] = 0;
+	}
+}
+
+void DisableAI()
+{
+	if (aiNavBackup[0] == 0)
+	{
+		// Mkae backups of the asm before overwriting
+		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &aiNavBackup[0], sizeof(int), NULL);
+		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &aiNavBackup[1], sizeof(int), NULL);
+		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA975B4), &aiNavBackup[2], sizeof(int), NULL);
+
+		// Stop AI system from writing position data
+		int zero = 0;
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &zero, sizeof(int), NULL);
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &zero, sizeof(int), NULL);
+		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA975B4), &zero, sizeof(int), NULL);
+	}
+}
+
 void initialize()
 {
 	HWND console = GetConsoleWindow();
@@ -380,7 +414,7 @@ void initialize()
 
 	if (isServer)
 	{
-		printf("Choose a character, and then\n");
+		printf("Choose a character (hit F10 for random),\n");
 		printf("wait for all players to enter the\n");
 		printf("track selection menu before starting\n");
 		printf("the race. Ask everyone if they are ready\n");
@@ -391,15 +425,9 @@ void initialize()
 
 	if (isClient)
 	{
-		printf("Choose a character, and then\n");
+		printf("Choose a character (hit F10 for random)\n");
 		printf("sit still, your menu syncs with the server\n");
 	}
-
-	// Stop AI system from writing position data
-	int zero = 0;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &zero, sizeof(int), NULL);
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &zero, sizeof(int), NULL);
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA975B4), &zero, sizeof(int), NULL);
 
 	// Ja ra, return asm, 
 	// disable weapons for players and enemies
@@ -408,6 +436,7 @@ void initialize()
 
 	// Patch the first if-statement of FUN_8003282c
 	// Allow 4 characters to load in high LOD
+	int zero = 0;
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB4860), &zero, sizeof(int), NULL);
 
 	short HighMpk = 0x00F2;
@@ -1197,6 +1226,23 @@ int main(int argc, char **argv)
 				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36D65), &d0d, 1, NULL);
 			}
 
+			// There are better ways to do input,
+			// but it doesn't need to be perfect, it just needs to work
+			if (!GetAsyncKeyState(VK_F10)) pressingF10 = false;
+
+			// Choose Random Track if you can't decide
+			if (GetAsyncKeyState(VK_F10) && !pressingF10)
+			{
+				// this disables key-repeat
+				pressingF10 = true;
+
+				// Get random kart
+				char kartByte = (char)roll(0, 0xF);
+				characterIDs[0] = kartByte;
+				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x86E84), &kartByte, 1, NULL);
+
+			}
+
 			Sleep(1);
 			continue;
 		}
@@ -1208,6 +1254,9 @@ int main(int argc, char **argv)
 		// if you're in the track selection menu
 		if (inTrackSelection)
 		{
+			// Disable AIs so that humans can be injected
+			DisableAI();
+
 			// copy server menu state to client, and exchange character info
 			SyncPlayersInMenus();
 
@@ -1266,6 +1315,14 @@ int main(int argc, char **argv)
 
 		if (inGame)
 		{
+			int playerFlags = 0;
+			ReadProcessMemory(handle, (PBYTE*)(AddrP1 + 0x2c8), &playerFlags, sizeof(int), 0);
+			if((playerFlags & 0x2000000) != 0) 
+			{
+				// Enable AIs properly to take over
+				EnableAI();
+			}
+
 			updateRace();
 		}
 	}

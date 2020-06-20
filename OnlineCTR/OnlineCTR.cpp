@@ -695,8 +695,11 @@ void updateNetwork()
 								ReadMem(0x8009EC30, &videoProgress[2], sizeof(char)); // next int
 
 								// Hit the 'Down' button on controller
-								WriteMem(0x80096AD8, &OneNineOne, sizeof(char));
-								WriteMem(0x8009F610, &OneNineOne, sizeof(char));
+								// 8008d2b0 -> 80096804
+								// + 0x14
+								char two = 2;
+								WriteMem(0x80096804 + 0x14, &two, sizeof(char));
+								
 							}
 						}
 					}
@@ -936,8 +939,10 @@ void SyncPlayersInMenus()
 					ReadMem(0x8009EC30, &videoProgress[2], sizeof(char)); // next int
 
 					// Hit the 'Down' button on controller
-					WriteMem(0x80096AD8, &OneNineOne, sizeof(char));
-					WriteMem(0x8009F610, &OneNineOne, sizeof(char));
+					// 8008d2b0 -> 80096804
+					// + 0x14
+					char two = 2;
+					WriteMem(0x80096804 + 0x14, &two, sizeof(char));
 				}
 
 				// Not sure if I want the "random track" button to automatically open

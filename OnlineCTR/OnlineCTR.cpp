@@ -13,7 +13,8 @@
 
 #define uint32_t DWORD
 
-DWORD baseAddress;
+// Can be negative
+int baseAddress;
 HANDLE handle;
 
 int PORT = 1234;
@@ -121,6 +122,16 @@ uintptr_t GetModuleBaseAddress(DWORD procId, const wchar_t* modName)
 	return 0;
 }
 
+void WriteMem(unsigned int psxAddr, void* pcAddr, int size)
+{
+	WriteProcessMemory(handle, (PBYTE*)(baseAddress + psxAddr), pcAddr, size, 0);
+}
+
+void ReadMem(unsigned int psxAddr, void* pcAddr, int size)
+{
+	ReadProcessMemory(handle, (PBYTE*)(baseAddress + psxAddr), pcAddr, size, 0);
+}
+
 unsigned char gameStateCurr; // 0x161A871
 unsigned char weaponPrev; // relative to posX
 unsigned char weaponCurr; // relative to posX
@@ -174,10 +185,10 @@ void SendMessageThread(char* message)
 
 	// set controller mode to 0P mode, trigger error message
 	char _0 = 0;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_0, sizeof(_0), NULL);
+	WriteMem(0x800987C9, &_0, sizeof(_0));
 
 	// change the error message
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3E6A4), message, strlen(message) + 1, NULL);
+	WriteMem(0x800BC684, message, strlen(message) + 1);
 
 	// leave it for one second
 	Sleep(1000);
@@ -187,7 +198,7 @@ void SendMessageThread(char* message)
 	{
 		// remove message
 		char _1 = 1;
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+		WriteMem(0x800987C9, &_1, sizeof(_1));
 	}
 }
 
@@ -201,7 +212,7 @@ void UnlockPlayersAndTracks()
 {
 	// Unlock all cars and tracks immediately
 	unsigned long long value = 18446744073709551615;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1070C), &value, sizeof(value), 0);
+	WriteMem(0x8008E6EC, &value, sizeof(value));
 
 	// This writes 0b11111111...
 	// which enables all flags in 8 bytes.
@@ -217,9 +228,9 @@ void EnableAI()
 	if (aiNavBackup[0] != 0)
 	{
 		// restore ASM so AI can take over
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &aiNavBackup[0], sizeof(int), NULL);
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &aiNavBackup[1], sizeof(int), NULL);
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA975B4), &aiNavBackup[2], sizeof(int), NULL);
+		WriteMem(0x80015538, &aiNavBackup[0], sizeof(int));
+		WriteMem(0x80015560, &aiNavBackup[1], sizeof(int));
+		WriteMem(0x80015594, &aiNavBackup[2], sizeof(int));
 
 		aiNavBackup[0] = 0;
 		aiNavBackup[1] = 0;
@@ -232,15 +243,15 @@ void DisableAI()
 	if (aiNavBackup[0] == 0)
 	{
 		// Mkae backups of the asm before overwriting
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &aiNavBackup[0], sizeof(int), NULL);
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &aiNavBackup[1], sizeof(int), NULL);
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA975B4), &aiNavBackup[2], sizeof(int), NULL);
+		ReadMem(0x80015538, &aiNavBackup[0], sizeof(int));
+		ReadMem(0x80015560, &aiNavBackup[1], sizeof(int));
+		ReadMem(0x80015594, &aiNavBackup[2], sizeof(int));
 
 		// Stop AI system from writing position data
 		int zero = 0;
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97558), &zero, sizeof(int), NULL);
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA97580), &zero, sizeof(int), NULL);
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA975B4), &zero, sizeof(int), NULL);
+		WriteMem(0x80015538, &zero, sizeof(int));
+		WriteMem(0x80015560, &zero, sizeof(int));
+		WriteMem(0x80015594, &zero, sizeof(int));
 	}
 }
 
@@ -272,9 +283,6 @@ void initialize()
 	// This will act as instance index (first instance, second, etc)
 	if(procID < 10) procID = GetProcId(L"ePSXe.exe", procID);
 
-	// get the base address, relative to the module
-	baseAddress = GetModuleBaseAddress(procID, L"ePSXe.exe");
-
 	// if the procID is not found
 	if (!procID)
 	{
@@ -285,6 +293,15 @@ void initialize()
 		system("pause");
 		exit(0);
 	}
+
+	// get the base address, relative to the module
+	baseAddress = GetModuleBaseAddress(procID, L"ePSXe.exe");
+
+	// Specific to ePSXe 2.0.5
+	baseAddress += 0xA82020;
+
+	// Remove 80 prefix
+	baseAddress -= 0x80000000;
 
 	// open the process with procID, and store it in the 'handle'
 	handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, procID);
@@ -432,17 +449,17 @@ void initialize()
 	// Ja ra, return asm, 
 	// disable weapons for players and enemies
 	int jaRa = 0x3e00008;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x6540C), &jaRa, sizeof(int), NULL);
+	WriteMem(0x8006540C, &jaRa, sizeof(int));
 
 	// Patch the first if-statement of FUN_8003282c
 	// Allow 4 characters to load in high LOD
 	int zero = 0;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB4860), &zero, sizeof(int), NULL);
+	WriteMem(0x80032840, &zero, sizeof(int));
 
 	short HighMpk = 0x00F2;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB48A8), &HighMpk, sizeof(short), NULL);
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB48C4), &HighMpk, sizeof(short), NULL);
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xAB48E0), &HighMpk, sizeof(short), NULL);
+	WriteMem(0x80032888, &HighMpk, sizeof(short));
+	WriteMem(0x800328A4, &HighMpk, sizeof(short));
+	WriteMem(0x800328C0, &HighMpk, sizeof(short));
 }
 
 void drawAI(int aiNumber, unsigned int netPos[3])
@@ -454,15 +471,15 @@ void drawAI(int aiNumber, unsigned int netPos[3])
 	// but with this, the AI's values still get set to the 
 	// values that the NAV system wants the AI to have at the starting line
 	int _30 = 30;
-	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x604), &_30, sizeof(int), NULL);
+	WriteMem(AddrAI + 0x604, &_30, sizeof(int));
 
-	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x2d4), &netPos[0], sizeof(int), NULL);
-	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x2d8), &netPos[1], sizeof(int), NULL);
-	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x2dC), &netPos[2], sizeof(int), NULL);
+	WriteMem(AddrAI + 0x2d4, &netPos[0], sizeof(int));
+	WriteMem(AddrAI + 0x2d8, &netPos[1], sizeof(int));
+	WriteMem(AddrAI + 0x2dC, &netPos[2], sizeof(int));
 
-	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x5f0), &netPos[0], sizeof(int), NULL);
-	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x5f4), &netPos[1], sizeof(int), NULL);
-	WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x5f8), &netPos[2], sizeof(int), NULL);
+	WriteMem(AddrAI + 0x5f0, &netPos[0], sizeof(int));
+	WriteMem(AddrAI + 0x5f4, &netPos[1], sizeof(int));
+	WriteMem(AddrAI + 0x5f8, &netPos[2], sizeof(int));
 }
 
 void updateNetwork()
@@ -654,16 +671,16 @@ void updateNetwork()
 						characterIDs[1] = kartID_short;
 
 						// close the lapRowSelector
-						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &zero, sizeof(char), 0);
+						WriteMem(0x800B59AC, &zero, sizeof(char));
 
 						// Get original track byte
-						ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &ogTrackByte, sizeof(char), 0);
+						ReadMem(0x800B46FA, &ogTrackByte, sizeof(char));
 
 						// set Text+Map address 
-						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackByte, sizeof(char), 0);
+						WriteMem(0x800B46FA, &trackByte, sizeof(char));
 
 						// set Video Address
-						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379C8), &trackByte, sizeof(char), 0);
+						WriteMem(0x800B59A8, &trackByte, sizeof(char));
 
 						// Spam the down button to update video, after selected-track changes
 						if (ogTrackByte != trackByte)
@@ -675,16 +692,13 @@ void updateNetwork()
 							while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
 							{
 								// read to see the new memory, 12 bytes, 3 ints
-								ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C48), &videoProgress[0], sizeof(char), 0); // first int
-								ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C4C), &videoProgress[1], sizeof(char), 0); // next int
-								ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C50), &videoProgress[2], sizeof(char), 0); // next int
+								ReadMem(0x8009EC28, &videoProgress[0], sizeof(char)); // first int
+								ReadMem(0x8009EC2C, &videoProgress[1], sizeof(char)); // next int
+								ReadMem(0x8009EC30, &videoProgress[2], sizeof(char)); // next int
 
 								// Hit the 'Down' button on controller
-								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x20603D), &OneNineOne, sizeof(char), 0);
-								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x22C58D), &OneNineOne, sizeof(char), 0);
-								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x99DDA8), &OneNineOne, sizeof(char), 0);
-								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB18AF8), &OneNineOne, sizeof(char), 0);
-								WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB21630), &OneNineOne, sizeof(char), 0);
+								WriteMem(0x80096AD8, &OneNineOne, sizeof(char));
+								WriteMem(0x8009F610, &OneNineOne, sizeof(char));
 							}
 						}
 					}
@@ -698,11 +712,11 @@ void updateNetwork()
 					{
 						// open the lapRowSelector menu, 
 						char one = 1;
-						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &one, sizeof(char), 0);
+						WriteMem(0x800B59AC, &one, sizeof(char));
 
 						// convert to one byte
 						char lapByte = (char)lapIdFromBuf;
-						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F940), &lapByte, sizeof(lapByte), 0);
+						WriteMem(0x8008D920, &lapByte, sizeof(lapByte));
 
 						// change the spawn order
 
@@ -716,8 +730,8 @@ void updateNetwork()
 
 						// Change the spawn order (look at comments above)
 						// With only two players, this should be fine for now
-						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 0), &one, sizeof(char), 0);
-						WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB02F48 + 1), &zero, sizeof(char), 0);
+						WriteMem(0x80080F28 + 0, &one, sizeof(char));
+						WriteMem(0x80080F28 + 1, &zero, sizeof(char));
 					}
 				}
 
@@ -731,12 +745,12 @@ void updateNetwork()
 					char two = 2;
 
 					// set menuA to 2 and menuB to 1,
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CE), &two, sizeof(char), 0);
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379D0), &one, sizeof(char), 0);
+					WriteMem(0x800B59AE, &two, sizeof(char));
+					WriteMem(0x800B59B0, &one, sizeof(char));
 
 					// Reset game frame counter to zero
 					int zero = 0;
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x96B20 + 0x1cec), &zero, sizeof(int), 0);
+					WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
 
 					inGame = false;
 
@@ -769,7 +783,7 @@ void updateNetwork()
 
 					// set controller mode to 1P, remove error message
 					char _1 = 1;
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+					WriteMem(0x800987C9, &_1, sizeof(_1));
 				}
 			}
 			// still need to handle disconnection
@@ -797,7 +811,7 @@ void SendOnlinePlayersToRAM()
 	for (i; i < numOnlinePlayers + 1; i++)
 	{
 		char oneByte = (char)characterIDs[i];
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2 * i), &oneByte, 1, 0); // 4, for 2 shorts
+		WriteMem(0x80086E84 + 2 * i, &oneByte, sizeof(char)); // 4, for 2 shorts
 	}
 
 	// If you have less than 4 human drivers
@@ -833,7 +847,7 @@ void SendOnlinePlayersToRAM()
 				}
 			}
 
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2 * i), &oneByte, 1, 0); // 4, for 2 shorts
+			WriteMem(0x80086E84 + 2 * i, &oneByte, sizeof(char)); // 4, for 2 shorts
 		}
 	}
 
@@ -841,7 +855,7 @@ void SendOnlinePlayersToRAM()
 	for (i; i < 8; i++)
 	{
 		char oneByte = (char)characterIDs[0];
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4 + 2 * i), &oneByte, 1, 0); // 4, for 2 shorts
+		WriteMem(0x80086E84 + 2 * i, &oneByte, sizeof(char)); // 4, for 2 shorts
 	}
 }
 
@@ -850,11 +864,11 @@ void SyncPlayersInMenus()
 	// Get characterID for this player
 	// for characters 0 - 7:
 	// CharacterID[i] : 0x1608EA4 + 2 * i
-	ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &characterIDs[0], sizeof(short), 0);
+	ReadMem(0x80086E84, &characterIDs[0], sizeof(short));
 
 	// check if lapRowSelector is open
 	bool lapRowSelectorOpen = false;
-	ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &lapRowSelectorOpen, sizeof(lapRowSelectorOpen), 0);
+	ReadMem(0x800B59AC, &lapRowSelectorOpen, sizeof(bool));
 
 	// Dont get stuck with Waiting for players...
 	if (!lapRowSelectorOpen)
@@ -866,7 +880,7 @@ void SyncPlayersInMenus()
 		serverSynced = false;
 
 		char _1 = 1;
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+		WriteMem(0x800987C9, &_1, sizeof(_1));
 	}
 
 	// if you are the server
@@ -887,7 +901,7 @@ void SyncPlayersInMenus()
 
 				// Write 25 to the track selection menu, which brings us to battle tracks
 				char _25 = 25;
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &_25, sizeof(_25), 0);
+				WriteMem(0x800B46FA, &_25, sizeof(_25));
 			}
 
 			// There are better ways to do input,
@@ -907,10 +921,10 @@ void SyncPlayersInMenus()
 				char OneNineOne = 191;
 
 				// set Text+Map address 
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackByte, sizeof(char), 0);
+				WriteMem(0x800B46FA, &trackByte, sizeof(char));
 
 				// set Video Address
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379C8), &trackByte, sizeof(char), 0);
+				WriteMem(0x800B59A8, &trackByte, sizeof(char));
 
 				// progress of video in menu
 				char videoProgress[3] = { 1, 1, 1 };
@@ -919,16 +933,13 @@ void SyncPlayersInMenus()
 				while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
 				{
 					// read to see the new memory, 12 bytes, 3 ints
-					ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C48), &videoProgress[0], sizeof(char), 0); // first int
-					ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C4C), &videoProgress[1], sizeof(char), 0); // next int
-					ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB20C50), &videoProgress[2], sizeof(char), 0); // next int
+					ReadMem(0x8009EC28, &videoProgress[0], sizeof(char)); // first int
+					ReadMem(0x8009EC2C, &videoProgress[1], sizeof(char)); // next int
+					ReadMem(0x8009EC30, &videoProgress[2], sizeof(char)); // next int
 
 					// Hit the 'Down' button on controller
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x20603D), &OneNineOne, sizeof(char), 0);
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x22C58D), &OneNineOne, sizeof(char), 0);
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0x99DDA8), &OneNineOne, sizeof(char), 0);
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB18AF8), &OneNineOne, sizeof(char), 0);
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB21630), &OneNineOne, sizeof(char), 0);
+					WriteMem(0x80096AD8, &OneNineOne, sizeof(char));
+					WriteMem(0x8009F610, &OneNineOne, sizeof(char));
 				}
 
 				// Not sure if I want the "random track" button to automatically open
@@ -936,12 +947,12 @@ void SyncPlayersInMenus()
 
 				// open the lapRowSelector
 				//char one = 1;
-				//WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CC), &one, sizeof(char), 0);
+				//WriteMem(0x800B59AC, &one, sizeof(char));
 
 			}
 
 			// Get Track ID, send it to clients
-			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackID, sizeof(trackID), 0);
+			ReadMem(0x800B46FA, &trackID, sizeof(trackID));
 
 			// 0 means Track Message
 			memset(sendBuf, 0, BUFFER_SIZE);
@@ -954,8 +965,8 @@ void SyncPlayersInMenus()
 			// These determine if the loading screen has triggered yet
 			unsigned char menuA = 0;
 			unsigned char menuB = 0;
-			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379CE), &menuA, sizeof(menuA), 0);
-			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB379D0), &menuB, sizeof(menuB), 0);
+			ReadMem(0x800B59AE, &menuA, sizeof(menuA));
+			ReadMem(0x800B59B0, &menuB, sizeof(menuB));
 
 			// if race is starting
 			if (menuA == 2 && menuB == 1)
@@ -971,7 +982,7 @@ void SyncPlayersInMenus()
 
 				// Reset game frame counter to zero
 				int zero = 0;
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x96B20 + 0x1cec), &zero, sizeof(int), 0);
+				WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
 
 				inGame = false;
 
@@ -993,7 +1004,7 @@ void SyncPlayersInMenus()
 				// 1 -> 5 laps
 				// 2 -> 7 laps
 				unsigned char lapRowSelected = 0;
-				ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F940), &lapRowSelected, sizeof(lapRowSelected), 0);
+				ReadMem(0x8008D920, &lapRowSelected, sizeof(lapRowSelected));
 
 				// 1 means Lap Message
 				memset(sendBuf, 0, BUFFER_SIZE);
@@ -1010,7 +1021,7 @@ void SyncPlayersInMenus()
 		sendLength = sprintf(sendBuf, "4 %d ", (int)characterIDs[0]);
 
 		// Get the new Track ID
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3671A), &trackID, sizeof(trackID), 0);
+		ReadMem(0x800B46FA, &trackID, sizeof(trackID));
 	}
 }
 
@@ -1028,13 +1039,13 @@ void throwExtrasToVoid()
 		AddrAI -= 0x670 * (i + 1);
 
 		int one = 1;
-		WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x604), &one, sizeof(int), NULL);
+		WriteMem(AddrAI + 0x604, &one, sizeof(int));
 
 		// Teleport them all under the track.
 		// You can try changing X and Z, but they'll just warp back to spawn.
 		// Only height goes into effect, which is all we need.
-		WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x2d8), &Gone, sizeof(int), 0);
-		WriteProcessMemory(handle, (PBYTE*)(AddrAI + 0x5f4), &Gone, sizeof(int), 0);
+		WriteMem(AddrAI + 0x2d8, &Gone, sizeof(int));
+		WriteMem(AddrAI + 0x5f4, &Gone, sizeof(int));
 	}
 }
 
@@ -1047,9 +1058,9 @@ void preparePositionMessage()
 	// Changing those coordinates will not move
 	// the players. 
 	unsigned int rawPosition[3];
-	ReadProcessMemory(handle, (PBYTE*)(AddrP1 + 0x2D4), &rawPosition[0], sizeof(int), 0);
-	ReadProcessMemory(handle, (PBYTE*)(AddrP1 + 0x2D8), &rawPosition[1], sizeof(int), 0);
-	ReadProcessMemory(handle, (PBYTE*)(AddrP1 + 0x2DC), &rawPosition[2], sizeof(int), 0);
+	ReadMem(AddrP1 + 0x2D4, &rawPosition[0], sizeof(int));
+	ReadMem(AddrP1 + 0x2D8, &rawPosition[1], sizeof(int));
+	ReadMem(AddrP1 + 0x2DC, &rawPosition[2], sizeof(int));
 
 	// Server sends to client
 	// Client sends to server
@@ -1066,7 +1077,7 @@ void updateRace()
 	// set controller mode to 1P mode, disable error message
 	// The message gets enabled lower in the code
 	char _1 = 1;
-	WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+	WriteMem(0x800987C9, &_1, sizeof(_1));
 
 	// If not all racers are ready to start
 	if (pauseUntilSync)
@@ -1074,22 +1085,22 @@ void updateRace()
 		// Set the traffic lights to be above the screen
 		// They are set to 3840 by default without modding
 		short wait = 4500;
-		WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A84C), &wait, sizeof(short), NULL);
+		WriteMem(0x8009882C, &wait, sizeof(short));
 
 		// see if the intro cutscene is playing
 		// becomes 0 when traffic lights should show
 		char introAnimState;
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xC81DFE), &introAnimState, sizeof(char), NULL);
+		ReadMem(0x801FFDDE, &introAnimState, sizeof(char));
 
 		// if the intro animation is done
 		if (introAnimState == 0)
 		{
 			// set controller mode to 0P mode, trigger error message
 			char _0 = 0;
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_0, sizeof(_0), NULL);
+			WriteMem(0x800987C9, &_0, sizeof(_0));
 
 			// change the error message
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB3E6A4), (char*)"waiting for players...", 23, NULL);
+			WriteMem(0x800BC684, (char*)"waiting for players...", 23);
 
 			if (isClient)
 			{
@@ -1112,7 +1123,7 @@ void updateRace()
 
 					// set controller mode to 1P, remove error message
 					char _1 = 1;
-					WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A7E9), &_1, sizeof(_1), NULL);
+					WriteMem(0x800987C9, &_1, sizeof(_1));
 				}
 			}
 
@@ -1161,15 +1172,13 @@ int main(int argc, char **argv)
 	// Main loop...
 	while(true)
 	{
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x9900C), &AddrP1, sizeof(AddrP1), NULL);
-		AddrP1 -= 0x80000000;
-		AddrP1 += baseAddress + 0xA82020;
+		ReadMem(0x8009900C, &AddrP1, sizeof(AddrP1));
 
 		// handle all message reading and writing
 		updateNetwork();
 
 		short inCharSelection = 0;
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F928), &inCharSelection, sizeof(inCharSelection), NULL);
+		ReadMem(0x8008D908, &inCharSelection, sizeof(inCharSelection));
 
 		// if you are in character selection menu
 		if (inCharSelection == 18100)
@@ -1179,51 +1188,51 @@ int main(int argc, char **argv)
 			char _C0 = 0xC0;
 			
 			// Write array of icon ids
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0xb50d2), &f, sizeof(f), NULL);
+			WriteMem(0x800b50d2, &f, sizeof(f));
 
 			// Change Pura Nav to go "down" to Oxide
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36EF9), &f, sizeof(f), NULL);
+			WriteMem(0x800B4ED9, &f, sizeof(f));
 
 			// Change Papu Nav to go "down" to Oxide
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F29), &f, sizeof(f), NULL);
+			WriteMem(0x800B4F09, &f, sizeof(f));
 
 			// Move Komodo Joe
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F30), &_80, sizeof(_80), NULL);
+			WriteMem(0x800B4F10, &_80, sizeof(_80));
 
 			// Move Penta Penguin
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F3C), &_C0, sizeof(_C0), NULL);
+			WriteMem(0x800B4F1C, &_C0, sizeof(_C0));
 
 			// Move Fake Crash, change nav to point to oxide
 			char fakeCrashData[8] = { 0x00, 0x01, 0xAE, 0x00, 0x06, 0x0E, 0x0D, 0x0F };
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F48), &fakeCrashData[0], 8, NULL);
+			WriteMem(0x800B4F28, &fakeCrashData[0], 8);
 
 			// Change 3P's Crash Icon to 1P's Oxide Icon
 			char oxideData[10] = { 0x40, 0x01, 0xAE, 0x00, 0x07, 0x0F, 0x0E, 0x0B, 0x0F, 0x00 };
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36F54), &oxideData[0], 10, NULL);
+			WriteMem(0x800B4F34, &oxideData[0], 10);
 
 			char _10 = 0x10; 
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB30544), &_10, 1, NULL);
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB313B8), &_10, 1, NULL);
-			WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB317E4), &_10, 1, NULL);
+			WriteMem(0x800AE524, &_10, sizeof(char));
+			WriteMem(0x800AF398, &_10, sizeof(char));
+			WriteMem(0x800AF7C4, &_10, sizeof(char));
 
 			char a;
 			char b;
 			char c;
 			char d;
-			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB08EA4), &a, 1, NULL);
-			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB37A10), &b, 1, NULL);
-			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB37A18), &c, 1, NULL);
-			ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xC81EC8), &d, 1, NULL);
+			ReadMem(0x80086E84, &a, sizeof(char));
+			ReadMem(0x800B59F0, &b, sizeof(char));
+			ReadMem(0x800B59F8, &c, sizeof(char));
+			ReadMem(0x801FFEA8, &d, sizeof(char));
 
 			if (a == 15 || b == 15 || c == 15 || d == 15)
 			{
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36D65), &_10, 1, NULL);
+				WriteMem(0x800B4D45, &_10, 1);
 			}
 
 			else
 			{
-				char d0d = 0;
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xB36D65), &d0d, 1, NULL);
+				char zero = 0;
+				WriteMem(0x800B4D45, &zero, sizeof(char));
 			}
 
 			// There are better ways to do input,
@@ -1239,8 +1248,7 @@ int main(int argc, char **argv)
 				// Get random kart
 				char kartByte = (char)roll(0, 0xF);
 				characterIDs[0] = kartByte;
-				WriteProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x86E84), &kartByte, 1, NULL);
-
+				WriteMem(0x80086E84, &kartByte, sizeof(char));
 			}
 
 			Sleep(1);
@@ -1249,7 +1257,7 @@ int main(int argc, char **argv)
 
 		// Check to see if you are in the track selection menu
 		bool inTrackSelection = false;
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB0F8AC), &inTrackSelection, sizeof(inTrackSelection), NULL);
+		ReadMem(0x8008D88C, &inTrackSelection, sizeof(inTrackSelection));
 
 		// if you're in the track selection menu
 		if (inTrackSelection)
@@ -1281,7 +1289,7 @@ int main(int argc, char **argv)
 		// 11 = racing
 
 		// Read gameStateCurr
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xB1A871), &gameStateCurr, sizeof(gameStateCurr), 0);
+		ReadMem(0x80098851, &gameStateCurr, sizeof(gameStateCurr));
 
 		// when you're in the loading screen
 		if (gameStateCurr == 2)
@@ -1302,7 +1310,7 @@ int main(int argc, char **argv)
 
 		// Read Game Timer
 		int timer = 0;
-		ReadProcessMemory(handle, (PBYTE*)(baseAddress + 0xA82020 + 0x96B20 + 0x1cec), &timer, sizeof(int), 0);
+		ReadMem(0x80096B20 + 0x1cec, &timer, sizeof(int));
 
 		if (
 			timer > 10 &&
@@ -1316,7 +1324,7 @@ int main(int argc, char **argv)
 		if (inGame)
 		{
 			int playerFlags = 0;
-			ReadProcessMemory(handle, (PBYTE*)(AddrP1 + 0x2c8), &playerFlags, sizeof(int), 0);
+			ReadMem(AddrP1 + 0x2c8, &playerFlags, sizeof(int));
 			if((playerFlags & 0x2000000) != 0) 
 			{
 				// Enable AIs properly to take over

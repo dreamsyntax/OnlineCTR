@@ -1,6 +1,4 @@
-#include <iostream>
 #include <cstdlib>
-#include <string>
 #include <ctime>
 #include <thread>
 #include <time.h>
@@ -8,13 +6,15 @@
 #include <stdio.h>
 #include <Windows.h>
 #include <tlhelp32.h>
+#include <windows.h>
 
 #include <SDL_net.h>
+#include "Scanner.h"
 
 #define uint32_t DWORD
 
 // Can be negative
-int baseAddress;
+long long int baseAddress;
 HANDLE handle;
 
 int PORT = 1234;
@@ -40,6 +40,7 @@ bool shutdownServer = false;
 // must be set to true after introAnim is 1
 bool inGame = false;
 unsigned int AddrP1 = 0;
+int ePSXeModule = 0;
 
 // needed for all hacks
 DWORD GetProcId(const wchar_t* processName, DWORD desiredIndex)
@@ -79,6 +80,11 @@ DWORD GetProcId(const wchar_t* processName, DWORD desiredIndex)
 			} while (Process32Next(hSnap, &procEntry));
 		}
 	}
+
+	// if the procID is not found
+	printf("Failed to inject emulator\n");
+	system("pause");
+	exit(0);
 
 	// close the snap and return 0
 	CloseHandle(hSnap);
@@ -208,19 +214,6 @@ void SendMessage(char* message)
 	t1.detach();
 }
 
-void UnlockPlayersAndTracks()
-{
-	// Unlock all cars and tracks immediately
-	unsigned long long value = 18446744073709551615;
-	WriteMem(0x8008E6EC, &value, sizeof(value));
-
-	// This writes 0b11111111...
-	// which enables all flags in 8 bytes.
-
-	// These flags determine what is unlocked,
-	// so by setting all bits to 1, it unlocks everything
-}
-
 int aiNavBackup[3] = { 0,0,0 };
 
 void EnableAI()
@@ -257,6 +250,7 @@ void DisableAI()
 
 void initialize()
 {
+	int choice = 0;
 	HWND console = GetConsoleWindow();
 	RECT r;
 	GetWindowRect(console, &r); //stores the console's current dimensions
@@ -267,41 +261,24 @@ void initialize()
 	// Initialize random number generator
 	srand(time(NULL));
 
-	printf("Step 1: Open ePSXe 2.0.5 on Windows\n");
+	printf("\n");
+	printf("Step 1: Open any ps1 emulator\n");
 	printf("Step 2: Open Crash Team Racing SCUS_94426\n");
 	printf("Step 3: Go to character selection\n");
 	printf("Step 4: Save a state (F1), then load it (F3)\n");
 	printf("\n");
-	printf("Step 5: Enter ProcessID below\n");
-	printf("For auto-detection, enter 0\n\n");
+	printf("Step 5: Enter emulator PID from 'Details'\n");
+	printf("           tab of Windows Task Manager\n");
 	printf("Enter: ");
 
 	DWORD procID = 0;
 	scanf("%d", &procID);
 
-	// auto detect the procID if the user enters number less than 5
-	// This will act as instance index (first instance, second, etc)
-	if(procID < 10) procID = GetProcId(L"ePSXe.exe", procID);
-
-	// if the procID is not found
-	if (!procID)
-	{
-		printf("Failed to find ePSXe.exe\n");
-		printf("open ePSXe.exe\n");
-		printf("and try again\n");
-
-		system("pause");
-		exit(0);
-	}
+	printf("\n");
+	printf("Searching for CTR 94426 in emulator ram...\n");
 
 	// get the base address, relative to the module
-	baseAddress = GetModuleBaseAddress(procID, L"ePSXe.exe");
-
-	// Specific to ePSXe 2.0.5
-	baseAddress += 0xA82020;
-
-	// Remove 80 prefix
-	baseAddress -= 0x80000000;
+	ePSXeModule = GetModuleBaseAddress(procID, L"ePSXe.exe");
 
 	// open the process with procID, and store it in the 'handle'
 	handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, procID);
@@ -314,16 +291,33 @@ void initialize()
 		exit(0);
 	}
 
-	// welcome the player
-	//SendMessage((char*)"OnlineCTR");
+	// This idea to scan memory for 11 bytes to automatically
+	// find that CTR is running, and to find the base address
+	// of any emulator universally, was EuroAli's idea in the
+	// CTR-Tools discord server. Thank you EuroAli
 
-	// Unlock all cars and tracks immediately
-	UnlockPlayersAndTracks();
+	// Shows at PSX address 0x8003C62D, only in CTR 94426
+	char ctrData[12] = { 0x71, 0xDC, 0x01, 0x0C, 0x00, 0x00, 0x00, 0x00, 0xD0, 0xF9, 0x00, 0x0C };
+
+	// can't be nullptr by default or it crashes,
+	// it will become 1 when the loop starts
+	baseAddress = 0;
+
+	// Modified from https://guidedhacking.com/threads/hyperscan-fast-vast-memory-scanner.9659/
+	std::vector<UINT_PTR> AddressHolder = Hyperscan::HYPERSCAN_SCANNER::Scan(procID, ctrData, 12, Hyperscan::HyperscanAllignment4Bytes,
+		Hyperscan::HyperscanTypeExact);
+
+	// Copy the result, need to add 1 for some reason
+	baseAddress = AddressHolder[0] + 1;
+
+	// Remove 0x8003C62D address of PSX memory,
+	// to find the relative address where PSX memory
+	// is located in RAM. It is ok for baseAddress
+	// to be a negative number
+	baseAddress -= 0x8003C62D;
 	
 	system("cls");
 	printf("\nStep 6: Configure Network\n");
-
-	int choice = 0;
 	printf("1: Server\n");
 	printf("2: Client\n");
 	printf("Enter: ");
@@ -445,6 +439,10 @@ void initialize()
 		printf("Choose a character (hit F10 for random)\n");
 		printf("sit still, your menu syncs with the server\n");
 	}
+
+	// Unlock all cars and tracks immediately
+	unsigned long long value = 0xFFFFFFFFFFFFFFFF;
+	WriteMem(0x8008E6EC, &value, sizeof(value));
 
 	// Ja ra, return asm, 
 	// disable weapons for players and enemies
@@ -1183,56 +1181,60 @@ int main(int argc, char **argv)
 		// if you are in character selection menu
 		if (inCharSelection == 18100)
 		{
-			char f = 0xF;
-			char _80 = 0x80;
-			char _C0 = 0xC0;
-			
-			// Write array of icon ids
-			WriteMem(0x800b50d2, &f, sizeof(f));
-
-			// Change Pura Nav to go "down" to Oxide
-			WriteMem(0x800B4ED9, &f, sizeof(f));
-
-			// Change Papu Nav to go "down" to Oxide
-			WriteMem(0x800B4F09, &f, sizeof(f));
-
-			// Move Komodo Joe
-			WriteMem(0x800B4F10, &_80, sizeof(_80));
-
-			// Move Penta Penguin
-			WriteMem(0x800B4F1C, &_C0, sizeof(_C0));
-
-			// Move Fake Crash, change nav to point to oxide
-			char fakeCrashData[8] = { 0x00, 0x01, 0xAE, 0x00, 0x06, 0x0E, 0x0D, 0x0F };
-			WriteMem(0x800B4F28, &fakeCrashData[0], 8);
-
-			// Change 3P's Crash Icon to 1P's Oxide Icon
-			char oxideData[10] = { 0x40, 0x01, 0xAE, 0x00, 0x07, 0x0F, 0x0E, 0x0B, 0x0F, 0x00 };
-			WriteMem(0x800B4F34, &oxideData[0], 10);
-
-			char _10 = 0x10; 
-			WriteMem(0x800AE524, &_10, sizeof(char));
-			WriteMem(0x800AF398, &_10, sizeof(char));
-			WriteMem(0x800AF7C4, &_10, sizeof(char));
-
-			char a;
-			char b;
-			char c;
-			char d;
-			ReadMem(0x80086E84, &a, sizeof(char));
-			ReadMem(0x800B59F0, &b, sizeof(char));
-			ReadMem(0x800B59F8, &c, sizeof(char));
-			ReadMem(0x801FFEA8, &d, sizeof(char));
-
-			if (a == 15 || b == 15 || c == 15 || d == 15)
+			// if ePSXe
+			if (ePSXeModule != 0)
 			{
-				WriteMem(0x800B4D45, &_10, 1);
-			}
+				char f = 0xF;
+				char _80 = 0x80;
+				char _C0 = 0xC0;
 
-			else
-			{
-				char zero = 0;
-				WriteMem(0x800B4D45, &zero, sizeof(char));
+				// Write array of icon ids
+				WriteMem(0x800b50d2, &f, sizeof(f));
+
+				// Change Pura Nav to go "down" to Oxide
+				WriteMem(0x800B4ED9, &f, sizeof(f));
+
+				// Change Papu Nav to go "down" to Oxide
+				WriteMem(0x800B4F09, &f, sizeof(f));
+
+				// Move Komodo Joe
+				WriteMem(0x800B4F10, &_80, sizeof(_80));
+
+				// Move Penta Penguin
+				WriteMem(0x800B4F1C, &_C0, sizeof(_C0));
+
+				// Move Fake Crash, change nav to point to oxide
+				char fakeCrashData[8] = { 0x00, 0x01, 0xAE, 0x00, 0x06, 0x0E, 0x0D, 0x0F };
+				WriteMem(0x800B4F28, &fakeCrashData[0], 8);
+
+				// Change 3P's Crash Icon to 1P's Oxide Icon
+				char oxideData[10] = { 0x40, 0x01, 0xAE, 0x00, 0x07, 0x0F, 0x0E, 0x0B, 0x0F, 0x00 };
+				WriteMem(0x800B4F34, &oxideData[0], 10);
+
+				char _10 = 0x10;
+				WriteMem(0x800AE524, &_10, sizeof(char));
+				WriteMem(0x800AF398, &_10, sizeof(char));
+				WriteMem(0x800AF7C4, &_10, sizeof(char));
+
+				char a;
+				char b;
+				char c;
+				char d;
+				ReadMem(0x80086E84, &a, sizeof(char));
+				ReadMem(0x800B59F0, &b, sizeof(char));
+				ReadMem(0x800B59F8, &c, sizeof(char));
+				ReadMem(0x801FFEA8, &d, sizeof(char));
+
+				if (a == 15 || b == 15 || c == 15 || d == 15)
+				{
+					WriteMem(0x800B4D45, &_10, 1);
+				}
+
+				else
+				{
+					char zero = 0;
+					WriteMem(0x800B4D45, &zero, sizeof(char));
+				}
 			}
 
 			// There are better ways to do input,

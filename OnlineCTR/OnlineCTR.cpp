@@ -175,7 +175,6 @@ bool pauseUntilSync = false;
 // This is hardcoded to wait for one client
 // This needs to wait for 7 clients in the future
 bool waitingForClient = false;
-bool serverSynced = false;
 
 /*
 MessageID
@@ -202,8 +201,6 @@ int roll(int min, int max)
 
 	return that;
 }
-
-clock_t timePosted = 0;
 
 int aiNavBackup[3] = { 0,0,0 };
 
@@ -536,351 +533,400 @@ void drawAI(int aiNumber, int* netPos)
 	unsigned int AddrAI = AddrP1;
 	AddrAI -= 0x670 * (aiNumber + 1);
 
-	// This stops the AI from proceding with the NAV system,
-	// but with this, the AI's values still get set to the 
-	// values that the NAV system wants the AI to have at the starting line
+	// clock for how long until player regains control,
+	// if it is always active, AIs dont fight me
 	int _30 = 30;
 	WriteMem(AddrAI + 0x604, &_30, sizeof(int));
 
+	// Will not move AI
+	/*
 	WriteMem(AddrAI + 0x2d4, &netPos[0], sizeof(int));
 	WriteMem(AddrAI + 0x2d8, &netPos[1], sizeof(int));
 	WriteMem(AddrAI + 0x2dC, &netPos[2], sizeof(int));
+	*/
 
 	WriteMem(AddrAI + 0x5f0, &netPos[0], sizeof(int));
 	WriteMem(AddrAI + 0x5f4, &netPos[1], sizeof(int));
 	WriteMem(AddrAI + 0x5f8, &netPos[2], sizeof(int));
 }
 
-void updateNetwork()
+void ServerParseMessage()
 {
-	// If you are server
-	if (isServer)
+	// message 0, 1, 2 will not come from client
+
+	// 3 means Position Message (same in server and client)
+	if (recvBuf.type == 3)
 	{
+		// draw the first AI (index = 0)
+		// at the position that we get
+		drawAI(0, (int*)&recvBuf.data[0]);
+
 #if 0
-		// check all sockets in the set,
-		// including mySocket, which (for the server)
-		// is only for temporary connections
-		//SDLNet_CheckSockets(socketSet, 0);
+		printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", recvBuf.type, recvBuf.size,
+			*(int*)&recvBuf.data[0],
+			*(int*)&recvBuf.data[4],
+			*(int*)&recvBuf.data[8]);
+#endif
+	}
 
-		// if we see activity on the server socket,
-		// which is NOT a client socket, it means
-		// somebody is trying to connect
-		//if (SDLNet_SocketReady(mySocket) != 0)
-		if(0)
-		{
-			// only accept a connection if there is room left on the server
-			if (clientCount < MAX_CONNECTIONS)
-			{
-				printf("Found connection\n");
+	// 4 means Kart ID
+	if (recvBuf.type == 4)
+	{
+		// Get characterID for this player
+		// for characters 0 - 7:
+		// CharacterID[i] : 0x1608EA4 + 2 * i
+		short kartID_short = (short)recvBuf.data[0];
+		characterIDs[1] = kartID_short;
 
-				int freeSpot = -99;
-				for (int loop = 0; loop < MAX_CONNECTIONS; loop++)
-				{
-					if (socketIsFree[loop] == true)
-					{
-						//cout << "Found a free spot at element: " << loop << endl;
-						socketIsFree[loop] = false; // Set the socket to be taken
-						freeSpot = loop;            // Keep the location to add our connection at that index in the array of client sockets
-						break;                      // Break out of the loop straight away
-					}
-				}
+#if 0
+		printf("Recv -- Tag: %d, size: %d, -- %d\n", recvBuf.type, recvBuf.size,
+			recvBuf.data[0]);
+#endif
+	}
 
-				// add socket to the clientSocket array
-				// add socket to the socketSet
-				// incrememnt clientCount
-				//clientSocket[freeSpot] = SDLNet_TCP_Accept(mySocket);
-				//SDLNet_TCP_AddSocket(socketSet, clientSocket[freeSpot]);
-				clientCount++;
-			}
-		}
+	// if the client "wants" to start the race
+	if (recvBuf.type == 5)
+	{
+		// this is hard-coded for one client
+		// needs to work with 7 clients
 
-		else
-		{
-			printf("Server socket not ready\n");
-		}
+		// if all clients send a 5 message,
+		// then stop waiting and start race
+		waitingForClient = false;
+#if 0
+		printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
+#endif
+	}
+}
+
+void ServerSendMessage()
+{
+	if (sendBuf.type == 0xFF)
+		return;
+
+	// send a message to the client
+	send(clientSocket[0], (char*)&sendBuf, sendBuf.size, 0);
+
+	// skip error checking
+#if 1
+	return;
 #endif
 
-		// check max connections, not num connections,
-		// because if someone leaves, then the client at
-		// the end of the socket array is not moved to that
-		// spot. Which I need to change at some point
+	if (sendBuf.type == 0)
+	{
+		// parse message
+		char c1 = sendBuf.data[0];
+		char c2 = sendBuf.data[1];
 
-		// check each client for message
-		for (int clientNumber = 0; clientNumber < MAX_CONNECTIONS; clientNumber++)
+		printf("Send -- Tag: %d, size: %d, -- %d %d\n", sendBuf.type, sendBuf.size, c1, c2);
+	}
+
+	if (sendBuf.type == 1)
+	{
+		// parse message
+		char c1 = sendBuf.data[0];
+
+		printf("Send -- Tag: %d, size: %d, -- %d\n", sendBuf.type, sendBuf.size, c1);
+	}
+}
+
+void updateServer()
+{
+
+#if 0
+	// check all sockets in the set,
+	// including mySocket, which (for the server)
+	// is only for temporary connections
+	//SDLNet_CheckSockets(socketSet, 0);
+	
+	// if we see activity on the server socket,
+	// which is NOT a client socket, it means
+	// somebody is trying to connect
+	//if (SDLNet_SocketReady(mySocket) != 0)
+	if (0)
+	{
+		// only accept a connection if there is room left on the server
+		if (clientCount < MAX_CONNECTIONS)
 		{
-			if (clientSocket[clientNumber] == INVALID_SOCKET)
-				continue;
+			printf("Found connection\n");
+	
+			int freeSpot = -99;
+			for (int loop = 0; loop < MAX_CONNECTIONS; loop++)
+			{
+				if (socketIsFree[loop] == true)
+				{
+					//cout << "Found a free spot at element: " << loop << endl;
+					socketIsFree[loop] = false; // Set the socket to be taken
+					freeSpot = loop;            // Keep the location to add our connection at that index in the array of client sockets
+					break;                      // Break out of the loop straight away
+				}
+			}
+	
+			// add socket to the clientSocket array
+			// add socket to the socketSet
+			// incrememnt clientCount
+			//clientSocket[freeSpot] = SDLNet_TCP_Accept(mySocket);
+			//SDLNet_TCP_AddSocket(socketSet, clientSocket[freeSpot]);
+			clientCount++;
+		}
+	}
+	
+	else
+	{
+		printf("Server socket not ready\n");
+	}
+#endif
 
-			// Get a message
-			memset(&recvBuf, 0xFF, sizeof(Message));
-			receivedByteCount = recv(clientSocket[clientNumber], (char*)&recvBuf, sizeof(Message), 0);
+	// check max connections, not num connections,
+	// because if someone leaves, then the client at
+	// the end of the socket array is not moved to that
+	// spot. Which I need to change at some point
+	
+	// check each client for message
+	for (int clientNumber = 0; clientNumber < MAX_CONNECTIONS; clientNumber++)
+	{
+		if (clientSocket[clientNumber] == INVALID_SOCKET)
+			continue;
 
+		// Get a message
+		memset(&recvBuf, 0xFF, sizeof(Message));
+		receivedByteCount = recv(clientSocket[clientNumber], (char*)&recvBuf, sizeof(Message), 0);
+
+		do
+		{
 			if (receivedByteCount == -1)
-				goto SendToClient;
-				//printf("Error %d\n", WSAGetLastError());
+				break;
+			//printf("Error %d\n", WSAGetLastError());
 
 			if (receivedByteCount == 0)
-				goto SendToClient;
-				// disconnect
+				break;
+			// disconnect
 
 			if (receivedByteCount != recvBuf.size)
 			{
 				//printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
 					//recvBuf.type, recvBuf.size, receivedByteCount);
 
-				goto SendToClient;
+				break;
 			}
 
-			// message 0, 1, 2 will not come from client
+			ServerParseMessage();
 
-			// 3 means Position Message (same in server and client)
-			if (recvBuf.type == 3)
+		} while (false);
+	
+		ServerSendMessage();
+	}
+}
+
+void clientParseMessage()
+{
+	// 0 means track ID
+	if (recvBuf.type == 0)
+	{
+		// parse message
+		char trackByte = recvBuf.data[0];
+		char kartID = recvBuf.data[1];
+
+#if 0
+		printf("Recv -- Tag: %d, size: %d, -- %d %d\n", recvBuf.type, recvBuf.size, trackByte, kartID);
+#endif
+
+		char zero = 0;
+		char ogTrackByte = 0;
+
+		// Get characterID for this player
+		// for characters 0 - 7:
+		// CharacterID[i] : 0x1608EA4 + 2 * i
+		short kartID_short = (short)kartID;
+		characterIDs[1] = kartID_short;
+
+		// close the lapRowSelector
+		WriteMem(0x800B59AC, &zero, sizeof(char));
+
+		// Get original track byte
+		ReadMem(0x800B46FA, &ogTrackByte, sizeof(char));
+
+		// set Text+Map address 
+		WriteMem(0x800B46FA, &trackByte, sizeof(char));
+
+		// set Video Address
+		WriteMem(0x800B59A8, &trackByte, sizeof(char));
+
+		// Spam the down button to update video, after selected-track changes
+		if (ogTrackByte != trackByte)
+		{
+			// progress of video in menu
+			char videoProgress[3] = { 1, 1, 1 };
+
+			// keep hitting "down" until video refreshes and sets to zero
+			while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
 			{
-				// draw the first AI (index = 0)
-				// at the position that we get
-				drawAI(0, (int*)&recvBuf.data[0]);
+				// read to see the new memory, 12 bytes, 3 ints
+				ReadMem(0x8009EC28, &videoProgress[0], sizeof(char)); // first int
+				ReadMem(0x8009EC2C, &videoProgress[1], sizeof(char)); // next int
+				ReadMem(0x8009EC30, &videoProgress[2], sizeof(char)); // next int
 
-				printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", recvBuf.type, recvBuf.size,
-					*(int*)&recvBuf.data[0],
-					*(int*)&recvBuf.data[4],
-					*(int*)&recvBuf.data[8]);
-			}
+				// Hit the 'Down' button on controller
+				// 8008d2b0 -> 80096804
+				// + 0x14
+				char two = 2;
+				WriteMem(0x80096804 + 0x14, &two, sizeof(char));
 
-			// 4 means Kart ID
-			if (recvBuf.type == 4)
-			{
-				// Get characterID for this player
-				// for characters 0 - 7:
-				// CharacterID[i] : 0x1608EA4 + 2 * i
-				short kartID_short = (short)recvBuf.data[0];
-				characterIDs[1] = kartID_short;
-
-				printf("Recv -- Tag: %d, size: %d, -- %d\n", recvBuf.type, recvBuf.size,
-					recvBuf.data[0]);
-			}
-
-			// if the client "wants" to start the race
-			if (recvBuf.type == 5)
-			{
-				// if the server is ready to start the race
-				if (serverSynced)
-				{
-					// this is hard-coded for one client
-					// needs to work with 7 clients
-
-					// if all clients send a 5 message,
-					// then stop waiting and start race
-					waitingForClient = false;
-
-					// tell the clients it is time to start
-					sendBuf.type = 5;
-					sendBuf.size = 2;
-
-					printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
-				}
-			}
-
-		SendToClient:
-
-			if (sendBuf.type == 0xFF)
-				return;
-
-			// send a message to the client
-			send(clientSocket[0], (char*)&sendBuf, sendBuf.size, 0);
-
-			if (sendBuf.type == 0)
-			{
-				// parse message
-				char c1 = sendBuf.data[0];
-				char c2 = sendBuf.data[1];
-
-				printf("Send -- Tag: %d, size: %d, -- %d %d\n", sendBuf.type, sendBuf.size, c1, c2);
-			}
-
-			if (sendBuf.type == 1)
-			{
-				// parse message
-				char c1 = sendBuf.data[0];
-
-				printf("Send -- Tag: %d, size: %d, -- %d\n", sendBuf.type, sendBuf.size, c1);
 			}
 		}
 	}
 
-	if (isClient)
+	// 1 means lap row, NOT DONE
+	if (recvBuf.type == 1)
 	{
-		// Get a message
-		memset(&recvBuf, 0xFF, sizeof(Message));
-		receivedByteCount = recv(mySocket, (char*)&recvBuf, sizeof(Message), 0);
+		// open the lapRowSelector menu, 
+		char one = 1;
+		WriteMem(0x800B59AC, &one, sizeof(char));
 
+		// convert to one byte
+		char lapByte = recvBuf.data[0];
+		WriteMem(0x8008D920, &lapByte, sizeof(lapByte));
+
+#if 0
+		printf("Recv -- Tag: %d, size: %d, -- %d\n", recvBuf.type, recvBuf.size, lapByte);
+#endif
+
+		// change the spawn order
+
+		// Server:   0 1 2 3 4 5 6 7
+		// Client 1: 1 0 2 3 4 5 6 7
+		// Client 2: 1 2 0 3 4 5 6 7
+		// Client 3: 1 2 3 0 4 5 6 7
+
+		// this will change when we have more than 2 players
+		char zero = 0;
+
+		// Change the spawn order (look at comments above)
+		// With only two players, this should be fine for now
+		WriteMem(0x80080F28 + 0, &one, sizeof(char));
+		WriteMem(0x80080F28 + 1, &zero, sizeof(char));
+	}
+
+	// 2 means start loading, NOT DONE
+	if (recvBuf.type == 2)
+	{
+#if 0
+		printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
+#endif
+
+		// let the client know that we are trying to load a race
+		pauseUntilSync = true;
+
+		char one = 1;
+		char two = 2;
+
+		// set menuA to 2 and menuB to 1,
+		WriteMem(0x800B59AE, &two, sizeof(char));
+		WriteMem(0x800B59B0, &one, sizeof(char));
+
+		// Reset game frame counter to zero
+		int zero = 0;
+		WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
+
+		inGame = false;
+
+		// This message will include number of players
+		// and array of characterIDs, save it for later
+		// Stop looking for messages until later
+	}
+
+	// 3 means Position Message (same in server and client)
+	if (recvBuf.type == 3)
+	{
+#if 0
+		printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", recvBuf.type, recvBuf.size,
+			*(int*)&recvBuf.data[0],
+			*(int*)&recvBuf.data[4],
+			*(int*)&recvBuf.data[8]);
+#endif
+
+		// draw the first AI (index = 0)
+		// at the position that we get
+		drawAI(0, (int*)&recvBuf.data[0]);
+	}
+
+	// message 4 will not come from server
+
+	// 5 means start race at traffic lights
+	if (recvBuf.type == 5)
+	{
+#if 0
+		printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
+#endif
+
+		pauseUntilSync = false;
+
+		// set controller mode to 1P, remove error message
+		char _1 = 1;
+		WriteMem(0x800987C9, &_1, sizeof(_1));
+	}
+}
+
+void clientSendMessage()
+{
+	if (sendBuf.type == 0xFF)
+		return;
+
+	// send a message to the server
+	send(mySocket, (char*)&sendBuf, sendBuf.size, 0);
+
+	// skip error checking
+#if 1
+	return;
+#endif
+
+	if (sendBuf.type == 4)
+	{
+		// parse message
+		char c1 = sendBuf.data[0];
+
+		printf("Send -- Tag: %d, size: %d, -- %d\n", sendBuf.type, sendBuf.size, c1);
+	}
+}
+
+void updateClient()
+{
+	// Get a message
+	memset(&recvBuf, 0xFF, sizeof(Message));
+	receivedByteCount = recv(mySocket, (char*)&recvBuf, sizeof(Message), 0);
+	
+	do
+	{
 		if (receivedByteCount == -1)
-			goto SendToServer;
-			//printf("Error %d\n", WSAGetLastError());
+			break;
+		//printf("Error %d\n", WSAGetLastError());
 
 		if (receivedByteCount == 0)
-			goto SendToServer;
-			// disconnect
-	
+			break;
+		// disconnect
+
 		if (receivedByteCount != recvBuf.size)
 		{
 			//printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
 			//	recvBuf.type, recvBuf.size, receivedByteCount);
-		
-			goto SendToServer;
+
+			break;
 		}
 
-		// 0 means track ID
-		if (recvBuf.type == 0)
-		{
-			// parse message
-			char trackByte = recvBuf.data[0];
-			char kartID =    recvBuf.data[1];
+		clientParseMessage();
+	} while (false);
+	
+	clientSendMessage();
+}
 
-			printf("Recv -- Tag: %d, size: %d, -- %d %d\n", recvBuf.type, recvBuf.size, trackByte, kartID);
+void updateNetwork()
+{
+	if (isServer)
+		updateServer();
 
-			char zero = 0;
-			char ogTrackByte = 0;
 
-			// Get characterID for this player
-			// for characters 0 - 7:
-			// CharacterID[i] : 0x1608EA4 + 2 * i
-			short kartID_short = (short)kartID;
-			characterIDs[1] = kartID_short;
-
-			// close the lapRowSelector
-			WriteMem(0x800B59AC, &zero, sizeof(char));
-
-			// Get original track byte
-			ReadMem(0x800B46FA, &ogTrackByte, sizeof(char));
-
-			// set Text+Map address 
-			WriteMem(0x800B46FA, &trackByte, sizeof(char));
-
-			// set Video Address
-			WriteMem(0x800B59A8, &trackByte, sizeof(char));
-
-			// Spam the down button to update video, after selected-track changes
-			if (ogTrackByte != trackByte)
-			{
-				// progress of video in menu
-				char videoProgress[3] = { 1, 1, 1 };
-
-				// keep hitting "down" until video refreshes and sets to zero
-				while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
-				{
-					// read to see the new memory, 12 bytes, 3 ints
-					ReadMem(0x8009EC28, &videoProgress[0], sizeof(char)); // first int
-					ReadMem(0x8009EC2C, &videoProgress[1], sizeof(char)); // next int
-					ReadMem(0x8009EC30, &videoProgress[2], sizeof(char)); // next int
-
-					// Hit the 'Down' button on controller
-					// 8008d2b0 -> 80096804
-					// + 0x14
-					char two = 2;
-					WriteMem(0x80096804 + 0x14, &two, sizeof(char));
-					
-				}
-			}
-		}
-
-		// 1 means lap row, NOT DONE
-		if (recvBuf.type == 1)
-		{
-			// open the lapRowSelector menu, 
-			char one = 1;
-			WriteMem(0x800B59AC, &one, sizeof(char));
-
-			// convert to one byte
-			char lapByte = recvBuf.data[0];
-			WriteMem(0x8008D920, &lapByte, sizeof(lapByte));
-
-			printf("Recv -- Tag: %d, size: %d, -- %d\n", recvBuf.type, recvBuf.size, lapByte);
-
-			// change the spawn order
-
-			// Server:   0 1 2 3 4 5 6 7
-			// Client 1: 1 0 2 3 4 5 6 7
-			// Client 2: 1 2 0 3 4 5 6 7
-			// Client 3: 1 2 3 0 4 5 6 7
-
-			// this will change when we have more than 2 players
-			char zero = 0;
-
-			// Change the spawn order (look at comments above)
-			// With only two players, this should be fine for now
-			WriteMem(0x80080F28 + 0, &one, sizeof(char));
-			WriteMem(0x80080F28 + 1, &zero, sizeof(char));
-		}
-
-		// 2 means start loading, NOT DONE
-		if (recvBuf.type == 2)
-		{
-			printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
-
-			// let the client know that we are trying to load a race
-			pauseUntilSync = true;
-
-			char one = 1;
-			char two = 2;
-
-			// set menuA to 2 and menuB to 1,
-			WriteMem(0x800B59AE, &two, sizeof(char));
-			WriteMem(0x800B59B0, &one, sizeof(char));
-
-			// Reset game frame counter to zero
-			int zero = 0;
-			WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
-
-			inGame = false;
-
-			// This message will include number of players
-			// and array of characterIDs, save it for later
-			// Stop looking for messages until later
-		}
-		
-		// 3 means Position Message (same in server and client)
-		if (recvBuf.type == 3)
-		{
-			printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", recvBuf.type, recvBuf.size, 
-				*(int*)&recvBuf.data[0],
-				*(int*)&recvBuf.data[4],
-				*(int*)&recvBuf.data[8]);
-
-			// draw the first AI (index = 0)
-			// at the position that we get
-			drawAI(0, (int*)&recvBuf.data[0]);
-		}
-
-		// message 4 will not come from server
-
-		// 5 means start race at traffic lights
-		if (recvBuf.type == 5)
-		{
-			printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
-
-			pauseUntilSync = false;
-
-			// set controller mode to 1P, remove error message
-			char _1 = 1;
-			WriteMem(0x800987C9, &_1, sizeof(_1));
-		}
-
-	SendToServer:
-
-		if (sendBuf.type == 0xFF)
-			return;
-
-		// send a message to the server
-		send(mySocket, (char*)&sendBuf, sendBuf.size, 0);
-
-		if (sendBuf.type == 4)
-		{
-			// parse message
-			char c1 = sendBuf.data[0];
-
-			printf("Send -- Tag: %d, size: %d, -- %d\n", sendBuf.type, sendBuf.size, c1);
-		}
-	}
+	if (isClient)
+		updateClient();
 }
 
 void SendOnlinePlayersToRAM()
@@ -959,7 +1005,6 @@ void SyncPlayersInMenus()
 		// wow I need to rename these
 		pauseUntilSync = false;
 		waitingForClient = false;
-		serverSynced = false;
 
 		char _1 = 1;
 		WriteMem(0x800987C9, &_1, sizeof(_1));
@@ -1059,9 +1104,6 @@ void SyncPlayersInMenus()
 				// wait for clients to be ready
 				waitingForClient = true;
 
-				// server is not ready to race
-				serverSynced = false;
-
 				// Reset game frame counter to zero
 				int zero = 0;
 				WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
@@ -1107,125 +1149,64 @@ void SyncPlayersInMenus()
 	}
 }
 
-void throwExtrasToVoid()
+void waitAtStart()
 {
-	// In a 2-player game, there is one player over network
-	int numberOfNetworkPlayers = 1;
-
-	// Move unwanted players into oblivion
-	for (int i = numberOfNetworkPlayers; i < 7; i++)
+	// Set the traffic lights to be above the screen
+	// They are set to 3840 by default without modding
+	short wait = 4500;
+	WriteMem(0x8009882C, &wait, sizeof(short));
+	
+	// see if the intro cutscene is playing
+	// becomes 0 when traffic lights should show
+	char introAnimState;
+	ReadMem(0x801FFDDE, &introAnimState, sizeof(char));
+	
+	// in Arcade, this is when the introAnim is finished,
+	// in Battle, there is no introAnim, 0 when loading ends
+	if (introAnimState == 0)
 	{
-		int Gone = 99999999;
-
-		unsigned int AddrAI = AddrP1;
-		AddrAI -= 0x670 * (i + 1);
-
-		int one = 1;
-		WriteMem(AddrAI + 0x604, &one, sizeof(int));
-
-		// Teleport them all under the track.
-		// You can try changing X and Z, but they'll just warp back to spawn.
-		// Only height goes into effect, which is all we need.
-		WriteMem(AddrAI + 0x2d8, &Gone, sizeof(int));
-		WriteMem(AddrAI + 0x5f4, &Gone, sizeof(int));
+		// set controller mode to 0P mode, trigger error message
+		char _0 = 0;
+		WriteMem(0x800987C9, &_0, sizeof(_0));
+	
+		// change the error message
+		WriteMem(0x800BC684, (char*)"waiting for players...", 23);
+	
+		if (isClient)
+		{
+			// client "wants" to start
+			sendBuf.type = 5;
+			sendBuf.size = 2;
+		}
+	
+		if (isServer)
+		{
+			// if the waiting is over
+			if (!waitingForClient)
+			{
+				// tell everyone to start
+				sendBuf.type = 5;
+				sendBuf.size = 2;
+	
+				// start the race
+				pauseUntilSync = false;
+	
+				// set controller mode to 1P, remove error message
+				char _1 = 1;
+				WriteMem(0x800987C9, &_1, sizeof(_1));
+			}
+		}
 	}
 }
-
-
 
 void preparePositionMessage()
 {
-	// Server sends to client
-	// Client sends to server
-	// 3 means Position Message
-
+	// send your position to the server
 	sendBuf.type = 3;
 	sendBuf.size = 14;
-
-	// Get Player 1 position
-	// All players have 12-byte positions (4x3). 
-	// Changing those coordinates will not move
-	// the players. 
 	ReadMem(AddrP1 + 0x2D4, (int*)&sendBuf.data[0], sizeof(int));
 	ReadMem(AddrP1 + 0x2D8, (int*)&sendBuf.data[4], sizeof(int));
 	ReadMem(AddrP1 + 0x2DC, (int*)&sendBuf.data[8], sizeof(int));
-}
-
-void updateRace()
-{	
-	// teleport extra characters under the world
-	throwExtrasToVoid();
-
-	// set controller mode to 1P mode, disable error message
-	// The message gets enabled lower in the code
-	char _1 = 1;
-	WriteMem(0x800987C9, &_1, sizeof(_1));
-
-	// If not all racers are ready to start
-	if (pauseUntilSync)
-	{
-		// Set the traffic lights to be above the screen
-		// They are set to 3840 by default without modding
-		short wait = 4500;
-		WriteMem(0x8009882C, &wait, sizeof(short));
-
-		// see if the intro cutscene is playing
-		// becomes 0 when traffic lights should show
-		char introAnimState;
-		ReadMem(0x801FFDDE, &introAnimState, sizeof(char));
-
-		// if the intro animation is done
-		if (introAnimState == 0)
-		{
-			// set controller mode to 0P mode, trigger error message
-			char _0 = 0;
-			WriteMem(0x800987C9, &_0, sizeof(_0));
-
-			// change the error message
-			WriteMem(0x800BC684, (char*)"waiting for players...", 23);
-
-			if (isClient)
-			{
-				// client "wants" to start
-				sendBuf.type = 5;
-				sendBuf.size = 2;
-			}
-
-			if (isServer)
-			{
-				serverSynced = true;
-
-				// if the waiting is over
-				if (!waitingForClient)
-				{
-					// tell everyone to start
-					sendBuf.type = 5;
-					sendBuf.size = 2;
-
-					// start the race
-					pauseUntilSync = false;
-
-					// set controller mode to 1P, remove error message
-					char _1 = 1;
-					WriteMem(0x800987C9, &_1, sizeof(_1));
-				}
-			}
-
-			// send a message to the server that you are ready to start
-
-			// all clients send message to server
-			// when all clients and server are ready
-			// server sends start message
-		}
-
-		// skip the rest
-		return;
-	}
-
-	// Send your player's position to the server (or client)
-	// If you are the client, this sends to server, DONE
-	// If you are the server, this sends to one client, NOT DONE
-	preparePositionMessage();
 }
 
 int main(int argc, char **argv)
@@ -1349,7 +1330,6 @@ int main(int argc, char **argv)
 		// if you're in the track selection menu
 		if (inTrackSelection)
 		{
-			// Disable AIs so that humans can be injected
 			DisableAI();
 
 			// copy server menu state to client, and exchange character info
@@ -1385,19 +1365,23 @@ int main(int argc, char **argv)
 			memset(&recvBuf, 0xFF, sizeof(Message));
 			memset(&sendBuf, 0xFF, sizeof(Message));
 
-			// constantly write these values,
-			// to make sure the right characters are loaded
+			// load character IDs
 			SendOnlinePlayersToRAM();
 
+			// set number of players
+			char numPlayers = 2;
+			WriteMem(0x8003B83C, &numPlayers, sizeof(numPlayers));
+			
 			// restart the loop
 			continue;
 		}
-
 
 		// Read Game Timer
 		int timer = 0;
 		ReadMem(0x80096B20 + 0x1cec, &timer, sizeof(int));
 
+		// If it's been more than 10 frames since you left
+		// the loading screen, then you are in-game
 		if (
 			timer > 10 &&
 
@@ -1407,17 +1391,36 @@ int main(int argc, char **argv)
 			inGame = true;
 		}
 
+		// If you are in-game
 		if (inGame)
 		{
-			int playerFlags = 0;
+			/*int playerFlags = 0;
 			ReadMem(AddrP1 + 0x2c8, &playerFlags, sizeof(int));
-			if((playerFlags & 0x2000000) != 0) 
+			if ((playerFlags & 0x2000000) != 0)
 			{
 				// Enable AIs properly to take over
 				EnableAI();
+			}*/
+
+			// pause the game till everyone is ready
+			if (pauseUntilSync)
+			{
+				waitAtStart();
 			}
 
-			updateRace();
+			// If it is time to race
+			else
+			{
+				// set controller mode to 1P mode, disable error message
+				// The message gets enabled lower in the code
+				char _1 = 1;
+				WriteMem(0x800987C9, &_1, sizeof(_1));
+
+				// Send your player's position to the server (or client)
+				// If you are the client, this sends to server, DONE
+				// If you are the server, this sends to one client, NOT DONE
+				preparePositionMessage();
+			}
 		}
 	}
 

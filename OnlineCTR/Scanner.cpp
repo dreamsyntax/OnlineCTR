@@ -165,7 +165,7 @@ BOOL HYPERSCAN_CHECK::IsAddressStatic(DWORD ProcessID, BYTE * &Address)
 	return FALSE;
 }
 
-std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanMemory(DWORD ProcessID, UINT_PTR ModuleBaseAddress, UINT_PTR ModuleSize, char* ScanPtr, INT ScanSize,
+std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanMemory(DWORD ProcessID, UINT_PTR ModuleBaseAddress, UINT_PTR ModuleSize, unsigned char* ScanPtr, INT ScanSize,
 	ScanAllignment AllignmentOfScan, ScanType TypeOfScan)
 {
 	std::vector<UINT_PTR> AddressHolder;
@@ -223,7 +223,7 @@ std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanMemory(DWORD ProcessID, UINT_PTR Mo
 	return AddressHolder;
 }
 
-std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanModules(DWORD ProcessID, char* ScanPtr, INT ScanSize, ScanAllignment AllignmentOfScan,
+std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanModules(DWORD ProcessID, unsigned char* ScanPtr, INT ScanSize, ScanAllignment AllignmentOfScan,
 	ScanType TypeOfScan)
 {
 	std::vector<UINT_PTR> AddressHolder;
@@ -257,7 +257,7 @@ std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanModules(DWORD ProcessID, char* Scan
 	return AddressHolder;
 }
 
-std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanWholeMemoryWithDelimiters(DWORD ProcessID, char* ScanPtr, INT ScanSize, ScanAllignment AllignmentOfScan,
+std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanWholeMemoryWithDelimiters(DWORD ProcessID, unsigned char* ScanPtr, INT ScanSize, ScanAllignment AllignmentOfScan,
 	ScanType TypeOfScan, DWORD BeginAddress, DWORD EndAddress)
 {
 	std::vector<UINT_PTR> AddressHolder;
@@ -310,7 +310,7 @@ std::vector<UINT_PTR> HYPERSCAN_SCANNER::ScanWholeMemoryWithDelimiters(DWORD Pro
 	return AddressHolder;
 }
 
-std::vector<UINT_PTR> HYPERSCAN_SCANNER::Scan(DWORD ProcessID, char* ScanPtr, INT ScanSize, ScanAllignment AllignmentOfScan, ScanType TypeOfScan)
+std::vector<UINT_PTR> HYPERSCAN_SCANNER::Scan(DWORD ProcessID, unsigned char* ScanPtr, INT ScanSize, ScanAllignment AllignmentOfScan, ScanType TypeOfScan)
 {
 	std::vector<UINT_PTR> AddressHolder;
 	AddressHolder.clear();

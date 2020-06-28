@@ -27,7 +27,7 @@ HANDLE handle;
 bool pressingF9 = false;
 bool pressingF10 = false;
 
-#define TEST_DEBUG 1
+#define TEST_DEBUG 0
 
 struct Message
 {
@@ -404,39 +404,9 @@ void initialize()
 
 		freeaddrinfo(result);
 
-// hard-coded for 2P
-#if 1
 		// set LISTENING socket to non-blocking
-		//unsigned long nonBlocking = 1;
-		//iResult = ioctlsocket(CtrMain.socket, FIONBIO, &nonBlocking);
-
-		iResult = listen(CtrMain.socket, SOMAXCONN);
-		if (iResult == SOCKET_ERROR) {
-			printf("listen failed with error: %d\n", WSAGetLastError());
-			closesocket(CtrMain.socket);
-			WSACleanup();
-			system("pause");
-		}
-
-		// erase client
-		memset(&CtrClient[0], 0xFF, sizeof(CtrClient));
-
-		// Accept a client socket
-		CtrClient[0].socket = accept(CtrMain.socket, NULL, NULL);
-		if (CtrClient[0].socket == INVALID_SOCKET) {
-			printf("accept failed with error: %d\n", WSAGetLastError());
-			closesocket(CtrMain.socket);
-			WSACleanup();
-			system("pause");
-		}
-
-		// set socket to non-blocking
 		unsigned long nonBlocking = 1;
-		iResult = ioctlsocket(CtrClient[0].socket, FIONBIO, &nonBlocking);
-
-		clientCount++;
-		printf("Found connection\n\n");
-#endif
+		iResult = ioctlsocket(CtrMain.socket, FIONBIO, &nonBlocking);
 	
 		printf("Choose a character (hit F10 for random),\n");
 		printf("wait for all players to enter the\n");
@@ -530,61 +500,60 @@ void drawAI(int aiNumber, int* netPos)
 	WriteMem(AddrAI + 0x5f8, &netPos[2], sizeof(int));
 }
 
+void ServerLookForClients()
+{
+	listen(CtrMain.socket, 0);
+
+	SOCKET temp = accept(CtrMain.socket, NULL, NULL);
+
+	if (temp != INVALID_SOCKET)
+	{
+		// only accept a connection if there is room left on the server
+		if (clientCount < MAX_CLIENTS)
+		{
+			for (int loop = 0; loop < MAX_CLIENTS; loop++)
+			{
+				if (CtrClient[loop].socket == INVALID_SOCKET)
+				{
+					// clear the socket
+					memset(&CtrClient[loop], 0xFF, sizeof(CtrClient));
+
+					// Accept a client socket
+					CtrClient[loop].socket = temp;
+
+					// set socket to non-blocking
+					unsigned long nonBlocking = 1;
+					ioctlsocket(CtrClient[loop].socket, FIONBIO, &nonBlocking);
+
+					clientCount++;
+					printf("Connection found, clientCount = %d\n", clientCount);
+
+					// Break out of the loop straight away
+					break;
+				}
+			}
+		}
+
+		// no room, close the socket
+		else
+		{
+			closesocket(temp);
+		}
+	}
+}
+
 void updateNetwork()
 {
 	// If you are server
 	if (isServer)
 	{
-		// hard-coded for 2P
-#if 0
-		listen(CtrMain.socket, SOMAXCONN);
-
-		SOCKET temp = accept(CtrMain.socket, NULL, NULL);
-
-		if(temp != INVALID_SOCKET)
-		{
-			// only accept a connection if there is room left on the server
-			if (clientCount < MAX_CLIENTS)
-			{
-				for (int loop = 0; loop < MAX_CLIENTS; loop++)
-				{
-					if (CtrClient[loop].socket != INVALID_SOCKET)
-					{
-						// clear the socket
-						memset(&CtrClient[loop], 0xFF, sizeof(CtrClient));
-
-						// Accept a client socket
-						CtrClient[loop].socket = temp;
-
-						// set socket to non-blocking
-						unsigned long nonBlocking = 1;
-						ioctlsocket(CtrClient[loop].socket, FIONBIO, &nonBlocking);
-
-						clientCount++;
-						printf("Connection found, clientCount = %d\n", clientCount);
-
-						// Break out of the loop straight away
-						break;                      
-					}
-				}
-			}
-			
-			// no room, close the socket
-			else
-			{
-				closesocket(temp);
-			}
-		}
-#endif
+		ServerLookForClients();
 
 		// check each client for message
 		for (int i = 0; i < clientCount; i++)
 		{
 			char type = 0xFF;
 			char size = 0xFF;
-
-			// hard-coded for 2P
-			if (i != 0) goto SendToClient;
 
 			// Get a message
 			memset(&CtrClient[i].recvBuf, 0xFF, sizeof(Message));
@@ -624,6 +593,9 @@ void updateNetwork()
 
 				goto SendToClient;
 			}
+
+			// hard-coded for 2P
+			if (i != 0) goto SendToClient;
 
 			// By now, we can confirm we have a valid message
 
@@ -1080,11 +1052,16 @@ void SyncPlayersInMenus()
 			// Get Track ID, send it to clients
 			ReadMem(0x800B46FA, &trackID, sizeof(trackID));
 
-			// hard-coded for 2P
-			CtrClient[0].sendBuf.type = 0;
-			CtrClient[0].sendBuf.size = 4;
-			CtrClient[0].sendBuf.data[0] = trackID;
-			CtrClient[0].sendBuf.data[1] = (char)characterIDs[0];
+			// send to all clients
+			for (int i = 0; i < clientCount; i++)
+			{
+				CtrClient[i].sendBuf.type = 0;
+				CtrClient[i].sendBuf.size = 4;
+				CtrClient[i].sendBuf.data[0] = trackID;
+
+				// hard-coded for 2P
+				CtrClient[i].sendBuf.data[1] = (char)characterIDs[0];
+			}
 		}
 
 		// if lap selector is open
@@ -1109,17 +1086,15 @@ void SyncPlayersInMenus()
 
 				inGame = false;
 
-				//printf("Sending to clients: Start Race with X amount of players and Array of characters\n");
+				// hard-code
+				// should check if all players are ready before start
 
-				// In the future, rather than sending a message to start with no info,
-				// we will send a message to start, with the number of players, and 
-				// which character each player selected
-
-				// Hard-Coded for 2P
-
-				// 2 means Start Message
-				CtrClient[0].sendBuf.type = 2;
-				CtrClient[0].sendBuf.size = 2;
+				// 2 means Start Message, to all clients
+				for (int i = 0; i < clientCount; i++)
+				{
+					CtrClient[i].sendBuf.type = 2;
+					CtrClient[i].sendBuf.size = 2;
+				}
 			}
 
 			// if lap is being chosen
@@ -1131,11 +1106,13 @@ void SyncPlayersInMenus()
 				unsigned char lapRowSelected = 0;
 				ReadMem(0x8008D920, &lapRowSelected, sizeof(lapRowSelected));
 
-				// Hard-Coded for 2P
-
-				CtrClient[0].sendBuf.type = 1;
-				CtrClient[0].sendBuf.size = 3;
-				CtrClient[0].sendBuf.data[0] = lapRowSelected;
+				// send info to all players
+				for (int i = 0; i < clientCount; i++)
+				{
+					CtrClient[i].sendBuf.type = 1;
+					CtrClient[i].sendBuf.size = 3;
+					CtrClient[i].sendBuf.data[0] = lapRowSelected;
+				}
 			}
 		}
 	}
@@ -1210,11 +1187,12 @@ void updateRace()
 			// if the waiting is over
 			if (!waitingForClient)
 			{
-				// hard-coded for 2P
-
 				// tell everyone to start
-				CtrClient[0].sendBuf.type = 5;
-				CtrClient[0].sendBuf.size = 2;
+				for (int i = 0; i < clientCount; i++)
+				{
+					CtrClient[0].sendBuf.type = 5;
+					CtrClient[0].sendBuf.size = 2;
+				}
 
 				// start the race
 				pauseUntilSync = false;

@@ -1,3 +1,6 @@
+// Winsock tutorial
+// https://docs.microsoft.com/en-us/windows/win32/winsock/finished-server-and-client-code
+
 #define WIN32_LEAN_AND_MEAN
 
 #include <windows.h>
@@ -21,17 +24,10 @@
 long long int baseAddress;
 HANDLE handle;
 
-unsigned short MAX_SOCKETS;
-unsigned short MAX_CONNECTIONS;
-
 bool pressingF9 = false;
 bool pressingF10 = false;
 
-SOCKET mySocket = INVALID_SOCKET;
-SOCKET clientSocket[8];
-bool socketIsFree[8];
-
-#define TEST_DEBUG 0
+#define TEST_DEBUG 1
 
 struct Message
 {
@@ -54,10 +50,20 @@ struct Message
 	char data[18];
 };
 
-Message sendBuf;
-Message sendBufPrev;
-Message recvBuf;
-Message recvBufPrev;
+struct SocketCtr
+{
+	SOCKET socket;
+	Message sendBuf;
+	Message sendBufPrev;
+	Message recvBuf;
+	Message recvBufPrev;
+};
+
+#define MAX_CLIENTS 8
+
+SocketCtr CtrMain;
+SocketCtr CtrClient[MAX_CLIENTS];
+
 int receivedByteCount = 0;
 int clientCount = 0;
 bool shutdownServer = false;
@@ -66,6 +72,28 @@ bool shutdownServer = false;
 bool inGame = false;
 unsigned int AddrP1 = 0;
 uintptr_t ePSXeModule = 0;
+
+unsigned char gameStateCurr; // 0x161A871
+unsigned char weaponPrev; // relative to posX
+unsigned char weaponCurr; // relative to posX
+unsigned char trackID; // 0x163671A
+unsigned char trackVideoID; // 0x16379C8
+unsigned char LevelOfDetail; // 0xB0F85C
+unsigned long long menuState;
+
+// ID[0] is the server's character
+short characterIDs[8];
+
+bool isServer = false;
+bool isClient = false;
+bool pauseUntilSync = false;
+
+// used by server only
+// This is hardcoded to wait for one client
+// This needs to wait for 7 clients in the future
+bool waitingForClient = false;
+
+int aiNavBackup[3] = { 0,0,0 };
 
 // needed for all hacks
 DWORD GetProcId(const wchar_t* processName, DWORD desiredIndex)
@@ -163,36 +191,6 @@ void ReadMem(unsigned int psxAddr, void* pcAddr, int size)
 	ReadProcessMemory(handle, (PBYTE*)(baseAddress + psxAddr), pcAddr, size, 0);
 }
 
-unsigned char gameStateCurr; // 0x161A871
-unsigned char weaponPrev; // relative to posX
-unsigned char weaponCurr; // relative to posX
-unsigned char trackID; // 0x163671A
-unsigned char trackVideoID; // 0x16379C8
-unsigned char LevelOfDetail; // 0xB0F85C
-unsigned long long menuState;
-
-// ID[0] is the server's character
-short characterIDs[8];
-
-bool isServer = false;
-bool isClient = false;
-bool pauseUntilSync = false;
-
-// used by server only
-// This is hardcoded to wait for one client
-// This needs to wait for 7 clients in the future
-bool waitingForClient = false;
-
-/*
-MessageID
-0 = trackID
-1 = lapRow message
-2 = start loading
-3 = position
-4 = kart ID
-5 = synced (ready to start loading, or ready to start race)
-*/
-
 // copied from here https://stackoverflow.com/questions/5891811/generate-random-number-between-1-and-3-in-c
 int roll(int min, int max)
 {
@@ -204,8 +202,6 @@ int roll(int min, int max)
 
 	return that;
 }
-
-int aiNavBackup[3] = { 0,0,0 };
 
 void EnableAI()
 {
@@ -344,8 +340,6 @@ void initialize()
 		// set max variables
 		// leave name as nullptr
 		isServer = true;
-		MAX_SOCKETS = 9;
-		MAX_CONNECTIONS = MAX_SOCKETS - 1;
 
 		hints.ai_flags = AI_PASSIVE;
 	}
@@ -357,8 +351,6 @@ void initialize()
 		// set max variables
 		// get server name
 		isClient = true;
-		MAX_SOCKETS = 1;
-		MAX_CONNECTIONS = 1;
 		printf("Enter IP or URL: ");
 		serverName = (char*)malloc(80);
 		scanf("%79s", serverName);
@@ -379,12 +371,9 @@ void initialize()
 		system("pause");
 	}
 
-	// set all connections to NULL
-	for (int loop = 0; loop < MAX_CONNECTIONS; loop++)
-	{
-		clientSocket[loop] = INVALID_SOCKET;
-		socketIsFree[loop] = true; // Set all our sockets to be free (i.e. available for use for new client connections)
-	}
+	// set all connections to INVALID_SOCKET
+	for (int i = 0; i < MAX_CLIENTS; i++)
+		memset(&CtrClient[0], 0xFF, sizeof(CtrClient[0]) * MAX_CLIENTS);
 
 	// Resolve the server address and port
 	iResult = getaddrinfo(serverName, PORT, &hints, &result);
@@ -400,110 +389,55 @@ void initialize()
 
 	system("cls\n");
 
-	// check for any problem when trying to connect
-	if (isClient)
-	{
-		// Attempt to connect to an address until one succeeds
-		for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
-
-			// Create a SOCKET for connecting to server
-			mySocket = socket(ptr->ai_family, ptr->ai_socktype,
-				ptr->ai_protocol);
-			if (mySocket == INVALID_SOCKET) {
-				printf("socket failed with error: %ld\n", WSAGetLastError());
-				WSACleanup();
-				system("pause");
-			}
-
-			// Connect to server.
-			iResult = connect(mySocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-			if (iResult == SOCKET_ERROR) {
-				closesocket(mySocket);
-				mySocket = INVALID_SOCKET;
-				continue;
-			}
-
-			// set socket to non-blocking
-			unsigned long nonBlocking = 1;
-			iResult = ioctlsocket(mySocket, FIONBIO, &nonBlocking);
-
-			break;
-		}
-
-		if (mySocket == INVALID_SOCKET || mySocket == SOCKET_ERROR)
-		{
-			printf("Connection Failed\n");
-			system("pause");
-			exit(0);
-		}
-
-		printf("Connected to server\n\n");
-	}
-
 	if (isServer)
 	{
 		// Create a SOCKET for connecting to server
-		mySocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-		if (mySocket == INVALID_SOCKET) {
-			printf("socket failed with error: %ld\n", WSAGetLastError());
-			freeaddrinfo(result);
-			WSACleanup();
-			system("pause");
-		}
+		CtrMain.socket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
 
 		// Setup the TCP listening socket
-		iResult = bind(mySocket, result->ai_addr, (int)result->ai_addrlen);
-		if (iResult == SOCKET_ERROR) {
-			printf("bind failed with error: %d\n", WSAGetLastError());
-			freeaddrinfo(result);
-			closesocket(mySocket);
-			WSACleanup();
-			system("pause");
-		}
+		bind(CtrMain.socket, result->ai_addr, (int)result->ai_addrlen);
 
-		printf("Host ready\n");
+		printf("Host ready\n\n");
 
 		// This waits infinitely until one client connects,
 		// then does not look for another client to connect
 
 		freeaddrinfo(result);
 
-		iResult = listen(mySocket, SOMAXCONN);
+// hard-coded for 2P
+#if 1
+		// set LISTENING socket to non-blocking
+		//unsigned long nonBlocking = 1;
+		//iResult = ioctlsocket(CtrMain.socket, FIONBIO, &nonBlocking);
+
+		iResult = listen(CtrMain.socket, SOMAXCONN);
 		if (iResult == SOCKET_ERROR) {
 			printf("listen failed with error: %d\n", WSAGetLastError());
-			closesocket(mySocket);
+			closesocket(CtrMain.socket);
 			WSACleanup();
 			system("pause");
 		}
 
-		// leave mySocket as blocking for now
+		// erase client
+		memset(&CtrClient[0], 0xFF, sizeof(CtrClient));
 
 		// Accept a client socket
-		clientSocket[0] = accept(mySocket, NULL, NULL);
-		if (clientSocket[0] == INVALID_SOCKET) {
+		CtrClient[0].socket = accept(CtrMain.socket, NULL, NULL);
+		if (CtrClient[0].socket == INVALID_SOCKET) {
 			printf("accept failed with error: %d\n", WSAGetLastError());
-			closesocket(mySocket);
+			closesocket(CtrMain.socket);
 			WSACleanup();
 			system("pause");
 		}
 
 		// set socket to non-blocking
 		unsigned long nonBlocking = 1;
-		iResult = ioctlsocket(clientSocket[0], FIONBIO, &nonBlocking);
+		iResult = ioctlsocket(CtrClient[0].socket, FIONBIO, &nonBlocking);
 
-		// copied from updateNetwork
-#if 1
 		clientCount++;
 		printf("Found connection\n\n");
 #endif
-
-		// No longer need server socket,
-		// only if there is 2P, and not 4P
-		closesocket(mySocket);
-	}
-
-	if (isServer)
-	{
+	
 		printf("Choose a character (hit F10 for random),\n");
 		printf("wait for all players to enter the\n");
 		printf("track selection menu before starting\n");
@@ -515,6 +449,37 @@ void initialize()
 
 	if (isClient)
 	{
+		// Attempt to connect to an address until one succeeds
+		for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
+
+			// Create a SOCKET for connecting to server
+			CtrMain.socket = socket(ptr->ai_family, ptr->ai_socktype,
+				ptr->ai_protocol);
+
+			// Connect to server.
+			connect(CtrMain.socket, ptr->ai_addr, (int)ptr->ai_addrlen);
+			if (iResult == SOCKET_ERROR) {
+				closesocket(CtrMain.socket);
+				CtrMain.socket = INVALID_SOCKET;
+				continue;
+			}
+
+			// set socket to non-blocking
+			unsigned long nonBlocking = 1;
+			iResult = ioctlsocket(CtrMain.socket, FIONBIO, &nonBlocking);
+
+			break;
+		}
+
+		if (CtrMain.socket == INVALID_SOCKET || CtrMain.socket == SOCKET_ERROR)
+		{
+			printf("Connection Failed\n");
+			system("pause");
+			exit(0);
+		}
+
+		printf("Connected to server\n\n");
+
 		printf("Choose a character (hit F10 for random)\n");
 		printf("sit still, your menu syncs with the server\n");
 	}
@@ -570,82 +535,89 @@ void updateNetwork()
 	// If you are server
 	if (isServer)
 	{
+		// hard-coded for 2P
 #if 0
-		// check all sockets in the set,
-		// including mySocket, which (for the server)
-		// is only for temporary connections
-		//SDLNet_CheckSockets(socketSet, 0);
+		listen(CtrMain.socket, SOMAXCONN);
 
-		// if we see activity on the server socket,
-		// which is NOT a client socket, it means
-		// somebody is trying to connect
-		//if (SDLNet_SocketReady(mySocket) != 0)
-		if (0)
+		SOCKET temp = accept(CtrMain.socket, NULL, NULL);
+
+		if(temp != INVALID_SOCKET)
 		{
 			// only accept a connection if there is room left on the server
-			if (clientCount < MAX_CONNECTIONS)
+			if (clientCount < MAX_CLIENTS)
 			{
-				printf("Found connection\n\n");
-
-				int freeSpot = -99;
-				for (int loop = 0; loop < MAX_CONNECTIONS; loop++)
+				for (int loop = 0; loop < MAX_CLIENTS; loop++)
 				{
-					if (socketIsFree[loop] == true)
+					if (CtrClient[loop].socket != INVALID_SOCKET)
 					{
-						//cout << "Found a free spot at element: " << loop << endl;
-						socketIsFree[loop] = false; // Set the socket to be taken
-						freeSpot = loop;            // Keep the location to add our connection at that index in the array of client sockets
-						break;                      // Break out of the loop straight away
+						// clear the socket
+						memset(&CtrClient[loop], 0xFF, sizeof(CtrClient));
+
+						// Accept a client socket
+						CtrClient[loop].socket = temp;
+
+						// set socket to non-blocking
+						unsigned long nonBlocking = 1;
+						ioctlsocket(CtrClient[loop].socket, FIONBIO, &nonBlocking);
+
+						clientCount++;
+						printf("Connection found, clientCount = %d\n", clientCount);
+
+						// Break out of the loop straight away
+						break;                      
 					}
 				}
-
-				// add socket to the clientSocket array
-				// add socket to the socketSet
-				// incrememnt clientCount
-				//clientSocket[freeSpot] = SDLNet_TCP_Accept(mySocket);
-				//SDLNet_TCP_AddSocket(socketSet, clientSocket[freeSpot]);
-				clientCount++;
 			}
-		}
-
-		else
-		{
-			printf("Server socket not ready\n");
+			
+			// no room, close the socket
+			else
+			{
+				closesocket(temp);
+			}
 		}
 #endif
 
-		// check max connections, not num connections,
-		// because if someone leaves, then the client at
-		// the end of the socket array is not moved to that
-		// spot. Which I need to change at some point
-
 		// check each client for message
-		for (int clientNumber = 0; clientNumber < MAX_CONNECTIONS; clientNumber++)
+		for (int i = 0; i < clientCount; i++)
 		{
-			if (clientSocket[clientNumber] == INVALID_SOCKET)
-				continue;
+			char type = 0xFF;
+			char size = 0xFF;
+
+			// hard-coded for 2P
+			if (i != 0) goto SendToClient;
 
 			// Get a message
-			memset(&recvBuf, 0xFF, sizeof(Message));
-			receivedByteCount = recv(clientSocket[clientNumber], (char*)&recvBuf, sizeof(Message), 0);
-
-			// dont parse same message twice
-			if (recvBuf.size == recvBufPrev.size)
-				if (memcmp(&recvBuf, &recvBufPrev, recvBuf.size) == 0)
-					continue;
-
-			// make a backup
-			memcpy(&recvBufPrev, &recvBuf, sizeof(Message));
+			memset(&CtrClient[i].recvBuf, 0xFF, sizeof(Message));
+			receivedByteCount = recv(CtrClient[i].socket, (char*)&CtrClient[i].recvBuf, sizeof(Message), 0);
 
 			if (receivedByteCount == -1)
 				goto SendToClient;
 			//printf("Error %d\n", WSAGetLastError());
 
 			if (receivedByteCount == 0)
-				goto SendToClient;
-			// disconnect
+			{
+				// disconnect
+				printf("Someone disconnected\n");
 
-			if (receivedByteCount < recvBuf.size)
+				// if this is not the last client
+				if (i != clientCount - 1)
+				{
+					// shift all existing clients
+					for (int j = i; j < clientCount; j++)
+						memcpy(&CtrClient[i], &CtrClient[i + 1], sizeof(CtrClient));
+
+					// repeat the loop for this socket index,
+					// since a new socket is in that place
+					i--;
+				}
+
+				clientCount--;
+				CtrClient[clientCount].socket = INVALID_SOCKET;
+
+				continue;
+			}
+
+			if (receivedByteCount < CtrClient[i].recvBuf.size)
 			{
 				//printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
 					//recvBuf.type, recvBuf.size, receivedByteCount);
@@ -653,40 +625,52 @@ void updateNetwork()
 				goto SendToClient;
 			}
 
+			// By now, we can confirm we have a valid message
+
+			// dont parse same message twice
+			if (CtrClient[i].recvBuf.size == CtrClient[i].recvBufPrev.size)
+				if (memcmp(&CtrClient[i].recvBuf, &CtrClient[i].recvBufPrev, CtrClient[i].recvBuf.size) == 0)
+					continue;
+
+			// make a backup
+			memcpy(&CtrClient[i].recvBufPrev, &CtrClient[i].recvBuf, sizeof(Message));
+
 			// message 0, 1, 2 will not come from client
+			type = CtrClient[i].recvBuf.type;
+			size = CtrClient[i].recvBuf.size;
 
 			// 3 means Position Message (same in server and client)
-			if (recvBuf.type == 3)
+			if (type == 3)
 			{
 				// draw the first AI (index = 1)
 				// at the position that we get
-				drawAI(1, (int*)&recvBuf.data[0]);
+				drawAI(1, (int*)&CtrClient[i].recvBuf.data[0]);
 
 #if TEST_DEBUG
-				printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", recvBuf.type, recvBuf.size,
-					*(int*)&recvBuf.data[0],
-					*(int*)&recvBuf.data[4],
-					*(int*)&recvBuf.data[8]);
+				printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
+					*(int*)&CtrClient[i].recvBuf.data[0],
+					*(int*)&CtrClient[i].recvBuf.data[4],
+					*(int*)&CtrClient[i].recvBuf.data[8]);
 #endif
 			}
 
 			// 4 means Kart ID
-			if (recvBuf.type == 4)
+			if (type == 4)
 			{
 				// Get characterID for this player
 				// for characters 0 - 7:
 				// CharacterID[i] : 0x1608EA4 + 2 * i
-				short kartID_short = (short)recvBuf.data[0];
+				short kartID_short = (short)CtrClient[i].recvBuf.data[0];
 				characterIDs[1] = kartID_short;
 
 #if TEST_DEBUG
-				printf("Recv -- Tag: %d, size: %d, -- %d\n", recvBuf.type, recvBuf.size,
-					recvBuf.data[0]);
+				printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size,
+					CtrClient[i].recvBuf.data[0]);
 #endif
 			}
 
 			// if the client "wants" to start the race
-			if (recvBuf.type == 5)
+			if (type == 5)
 			{
 				// this is hard-coded for one client
 				// needs to work with 7 clients
@@ -696,7 +680,7 @@ void updateNetwork()
 				waitingForClient = false;
 
 #if TEST_DEBUG
-				printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
+				printf("Recv -- Tag: %d, size: %d\n", type, size);
 #endif
 			}
 
@@ -705,53 +689,57 @@ void updateNetwork()
 			// dont send the same message twice, 
 			// or
 			// To do: if client has not gotten prev message
-			if (sendBuf.size == sendBufPrev.size)
-				if (memcmp(&sendBuf, &sendBufPrev, sendBuf.size) == 0)
+			if (CtrClient[i].sendBuf.size == CtrClient[i].sendBufPrev.size)
+				if (memcmp(&CtrClient[i].sendBuf, &CtrClient[i].sendBufPrev, CtrClient[i].sendBuf.size) == 0)
 					continue;
 
 			// send a message to the client
-			send(clientSocket[0], (char*)&sendBuf, sizeof(Message), 0);
+			send(CtrClient[i].socket, (char*)&CtrClient[i].sendBuf, sizeof(Message), 0);
 
 			// make a backup
-			memcpy(&sendBufPrev, &sendBuf, sizeof(Message));
+			memcpy(&CtrClient[i].sendBufPrev, &CtrClient[i].sendBuf, sizeof(Message));
 
 #if TEST_DEBUG
-			if (sendBuf.type == 0)
+
+			type = CtrClient[i].sendBuf.type;
+			size = CtrClient[i].sendBuf.size;
+
+			if (type == 0)
 			{
 				// parse message
-				char c1 = sendBuf.data[0];
-				char c2 = sendBuf.data[1];
+				char c1 =   CtrClient[i].sendBuf.data[0];
+				char c2 =   CtrClient[i].sendBuf.data[1];
 
-				printf("Send -- Tag: %d, size: %d, -- %d %d\n", sendBuf.type, sendBuf.size, c1, c2);
+				printf("Send -- Tag: %d, size: %d, -- %d %d\n", type, size, c1, c2);
 			}
 
-			if (sendBuf.type == 1)
+			if (type == 1)
 			{
 				// parse message
-				char c1 = sendBuf.data[0];
+				char c1 = CtrClient[i].sendBuf.data[0];
 
-				printf("Send -- Tag: %d, size: %d, -- %d\n", sendBuf.type, sendBuf.size, c1);
+				printf("Send -- Tag: %d, size: %d, -- %d\n", type, size, c1);
 			}
 
-			if (sendBuf.type == 2)
+			if (type == 2)
 			{
-				printf("Send -- Tag: %d, size: %d\n", sendBuf.type, sendBuf.size);
+				printf("Send -- Tag: %d, size: %d\n", type, size);
 			}
 
-			if (sendBuf.type == 3)
+			if (type == 3)
 			{
-				int i1 = *(int*)sendBuf.data[0];
-				int i2 = *(int*)sendBuf.data[4];
-				int i3 = *(int*)sendBuf.data[8];
+				int i1 = *(int*)&CtrClient[i].sendBuf.data[0];
+				int i2 = *(int*)&CtrClient[i].sendBuf.data[4];
+				int i3 = *(int*)&CtrClient[i].sendBuf.data[8];
 
-				printf("Send -- Tag: %d, size: %d -- %d %d %d\n", sendBuf.type, sendBuf.size, i1, i2, i3);
+				printf("Send -- Tag: %d, size: %d -- %d %d %d\n", type, size, i1, i2, i3);
 			}
 
 			// type 4 will not come from server
 
-			if (sendBuf.type == 5)
+			if (type == 5)
 			{
-				printf("Send -- Tag: %d, size: %d\n", sendBuf.type, sendBuf.size);
+				printf("Send -- Tag: %d, size: %d\n", type, size);
 			}
 #endif
 		}
@@ -759,27 +747,25 @@ void updateNetwork()
 
 	if (isClient)
 	{
+		char type = 0xFF;
+		char size = 0xFF;
+
 		// Get a message
-		memset(&recvBuf, 0xFF, sizeof(Message));
-		receivedByteCount = recv(mySocket, (char*)&recvBuf, sizeof(Message), 0);
-
-		// dont parse same message twice
-		if (recvBuf.size == recvBufPrev.size)
-			if (memcmp(&recvBuf, &recvBufPrev, recvBuf.size) == 0)
-				return;
-
-		// make a backup
-		memcpy(&recvBufPrev, &recvBuf, sizeof(Message));
+		memset(&CtrMain.recvBuf, 0xFF, sizeof(Message));
+		receivedByteCount = recv(CtrMain.socket, (char*)&CtrMain.recvBuf, sizeof(Message), 0);
 
 		if (receivedByteCount == -1)
 			goto SendToServer;
 		//printf("Error %d\n", WSAGetLastError());
 
 		if (receivedByteCount == 0)
-			goto SendToServer;
-		// disconnect
+		{
+			printf("Disconnected\n");
+			system("pause");
+			exit(0);
+		}
 
-		if (receivedByteCount < recvBuf.size)
+		if (receivedByteCount < CtrMain.recvBuf.size)
 		{
 			//printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
 			//	recvBuf.type, recvBuf.size, receivedByteCount);
@@ -787,15 +773,28 @@ void updateNetwork()
 			goto SendToServer;
 		}
 
+		// We can confirm we have a valid message
+
+		// dont parse same message twice
+		if (CtrMain.recvBuf.size == CtrMain.recvBufPrev.size)
+			if (memcmp(&CtrMain.recvBuf, &CtrMain.recvBufPrev, CtrMain.recvBuf.size) == 0)
+				return;
+
+		// make a backup
+		memcpy(&CtrMain.recvBufPrev, &CtrMain.recvBuf, sizeof(Message));
+
+		type = CtrMain.recvBuf.type;
+		size = CtrMain.recvBuf.size;
+
 		// 0 means track ID
-		if (recvBuf.type == 0)
+		if (type == 0)
 		{
 			// parse message
-			char trackByte = recvBuf.data[0];
-			char kartID = recvBuf.data[1];
+			char trackByte = CtrMain.recvBuf.data[0];
+			char kartID =    CtrMain.recvBuf.data[1];
 
 #if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d, -- %d %d\n", recvBuf.type, recvBuf.size, trackByte, kartID);
+			printf("Recv -- Tag: %d, size: %d, -- %d %d\n", type, size, trackByte, kartID);
 #endif
 
 			char zero = 0;
@@ -826,18 +825,18 @@ void updateNetwork()
 		}
 
 		// 1 means lap row, NOT DONE
-		if (recvBuf.type == 1)
+		if (type == 1)
 		{
 			// open the lapRowSelector menu, 
 			char one = 1;
 			WriteMem(0x800B59AC, &one, sizeof(char));
 
 			// convert to one byte
-			char lapByte = recvBuf.data[0];
+			char lapByte = CtrMain.recvBuf.data[0];
 			WriteMem(0x8008D920, &lapByte, sizeof(lapByte));
 
 #if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d, -- %d\n", recvBuf.type, recvBuf.size, lapByte);
+			printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size, lapByte);
 #endif
 
 			// change the spawn order
@@ -857,10 +856,10 @@ void updateNetwork()
 		}
 
 		// 2 means start loading, NOT DONE
-		if (recvBuf.type == 2)
+		if (type == 2)
 		{
 #if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
+			printf("Recv -- Tag: %d, size: %d\n", type, size);
 #endif
 
 			// let the client know that we are trying to load a race
@@ -885,27 +884,27 @@ void updateNetwork()
 		}
 
 		// 3 means Position Message (same in server and client)
-		if (recvBuf.type == 3)
+		if (type == 3)
 		{
 #if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", recvBuf.type, recvBuf.size,
-				*(int*)&recvBuf.data[0],
-				*(int*)&recvBuf.data[4],
-				*(int*)&recvBuf.data[8]);
+			printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
+				*(int*)&CtrMain.recvBuf.data[0],
+				*(int*)&CtrMain.recvBuf.data[4],
+				*(int*)&CtrMain.recvBuf.data[8]);
 #endif
 
 			// draw the first AI (index = 1)
 			// at the position that we get
-			drawAI(1, (int*)&recvBuf.data[0]);
+			drawAI(1, (int*)&CtrMain.recvBuf.data[0]);
 		}
 
 		// message 4 will not come from server
 
 		// 5 means start race at traffic lights
-		if (recvBuf.type == 5)
+		if (type == 5)
 		{
 #if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d\n", recvBuf.type, recvBuf.size);
+			printf("Recv -- Tag: %d, size: %d\n", type, size);
 #endif
 
 			pauseUntilSync = false;
@@ -917,43 +916,47 @@ void updateNetwork()
 
 	SendToServer:
 
-		if (sendBuf.type == 0xFF)
+		if (CtrMain.sendBuf.type == 0xFF)
 			return;
 
 		// dont send the same message twice, 
 		// or
 		// To do: if server has not gotten prev message
-		if (sendBuf.size == sendBufPrev.size)
-			if (memcmp(&sendBuf, &sendBufPrev, sendBuf.size) == 0)
+		if (CtrMain.sendBuf.size == CtrMain.sendBufPrev.size)
+			if (memcmp(&CtrMain.sendBuf, &CtrMain.sendBufPrev, CtrMain.sendBuf.size) == 0)
 				return;
 
 		// send a message to the client
-		send(mySocket, (char*)&sendBuf, sizeof(Message), 0);
+		send(CtrMain.socket, (char*)&CtrMain.sendBuf, sizeof(Message), 0);
 
 		// make a backup
-		memcpy(&sendBufPrev, &sendBuf, sizeof(Message));
+		memcpy(&CtrMain.sendBufPrev, &CtrMain.sendBuf, sizeof(Message));
 
 #if TEST_DEBUG
-		if (sendBuf.type == 3)
-		{
-			int i1 = *(int*)sendBuf.data[0];
-			int i2 = *(int*)sendBuf.data[4];
-			int i3 = *(int*)sendBuf.data[8];
 
-			printf("Send -- Tag: %d, size: %d -- %d %d %d\n", sendBuf.type, sendBuf.size, i1, i2, i3);
+		type = CtrMain.sendBuf.type;
+		size = CtrMain.sendBuf.size;
+
+		if (type == 3)
+		{
+			int i1 = *(int*)&CtrMain.sendBuf.data[0];
+			int i2 = *(int*)&CtrMain.sendBuf.data[4];
+			int i3 = *(int*)&CtrMain.sendBuf.data[8];
+
+			printf("Send -- Tag: %d, size: %d -- %d %d %d\n", type, size, i1, i2, i3);
 		}
 
-		if (sendBuf.type == 4)
+		if (type == 4)
 		{
 			// parse message
-			char c1 = sendBuf.data[0];
+			char c1 = CtrMain.sendBuf.data[0];
 
-			printf("Send -- Tag: %d, size: %d, -- %d\n", sendBuf.type, sendBuf.size, c1);
+			printf("Send -- Tag: %d, size: %d, -- %d\n", type, size, c1);
 		}
 
-		if (sendBuf.type == 5)
+		if (type == 5)
 		{
-			printf("Send -- Tag: %d, size: %d\n", sendBuf.type, sendBuf.size);
+			printf("Send -- Tag: %d, size: %d\n", type, size);
 		}
 #endif
 	}
@@ -1077,10 +1080,11 @@ void SyncPlayersInMenus()
 			// Get Track ID, send it to clients
 			ReadMem(0x800B46FA, &trackID, sizeof(trackID));
 
-			sendBuf.type = 0;
-			sendBuf.size = 4;
-			sendBuf.data[0] = trackID;
-			sendBuf.data[1] = (char)characterIDs[0];
+			// hard-coded for 2P
+			CtrClient[0].sendBuf.type = 0;
+			CtrClient[0].sendBuf.size = 4;
+			CtrClient[0].sendBuf.data[0] = trackID;
+			CtrClient[0].sendBuf.data[1] = (char)characterIDs[0];
 		}
 
 		// if lap selector is open
@@ -1111,9 +1115,11 @@ void SyncPlayersInMenus()
 				// we will send a message to start, with the number of players, and 
 				// which character each player selected
 
+				// Hard-Coded for 2P
+
 				// 2 means Start Message
-				sendBuf.type = 2;
-				sendBuf.size = 2;
+				CtrClient[0].sendBuf.type = 2;
+				CtrClient[0].sendBuf.size = 2;
 			}
 
 			// if lap is being chosen
@@ -1125,9 +1131,11 @@ void SyncPlayersInMenus()
 				unsigned char lapRowSelected = 0;
 				ReadMem(0x8008D920, &lapRowSelected, sizeof(lapRowSelected));
 
-				sendBuf.type = 1;
-				sendBuf.size = 3;
-				sendBuf.data[0] = lapRowSelected;
+				// Hard-Coded for 2P
+
+				CtrClient[0].sendBuf.type = 1;
+				CtrClient[0].sendBuf.size = 3;
+				CtrClient[0].sendBuf.data[0] = lapRowSelected;
 			}
 		}
 	}
@@ -1135,9 +1143,9 @@ void SyncPlayersInMenus()
 	// if you are the client
 	if (isClient)
 	{
-		sendBuf.type = 4;
-		sendBuf.size = 3;
-		sendBuf.data[0] = (char)characterIDs[0];
+		CtrMain.sendBuf.type = 4;
+		CtrMain.sendBuf.size = 3;
+		CtrMain.sendBuf.data[0] = (char)characterIDs[0];
 
 		// Get the new Track ID
 		ReadMem(0x800B46FA, &trackID, sizeof(trackID));
@@ -1146,20 +1154,26 @@ void SyncPlayersInMenus()
 
 void preparePositionMessage()
 {
+	Message* sendBuf;
+
+	// hard-coded, need to change
+	if (isServer) sendBuf = &CtrClient[0].sendBuf;
+	else          sendBuf = &CtrMain.sendBuf;
+
 	// Server sends to client
 	// Client sends to server
 	// 3 means Position Message
 
-	sendBuf.type = 3;
-	sendBuf.size = 14;
+	sendBuf->type = 3;
+	sendBuf->size = 14;
 
 	// Get Player 1 position
 	// All players have 12-byte positions (4x3). 
 	// Changing those coordinates will not move
 	// the players. 
-	ReadMem(AddrP1 + 0x2D4, (int*)&sendBuf.data[0], sizeof(int));
-	ReadMem(AddrP1 + 0x2D8, (int*)&sendBuf.data[4], sizeof(int));
-	ReadMem(AddrP1 + 0x2DC, (int*)&sendBuf.data[8], sizeof(int));
+	ReadMem(AddrP1 + 0x2D4, (int*)&sendBuf->data[0], sizeof(int));
+	ReadMem(AddrP1 + 0x2D8, (int*)&sendBuf->data[4], sizeof(int));
+	ReadMem(AddrP1 + 0x2DC, (int*)&sendBuf->data[8], sizeof(int));
 }
 
 void updateRace()
@@ -1187,8 +1201,8 @@ void updateRace()
 		if (isClient)
 		{
 			// client "wants" to start
-			sendBuf.type = 5;
-			sendBuf.size = 2;
+			CtrMain.sendBuf.type = 5;
+			CtrMain.sendBuf.size = 2;
 		}
 
 		if (isServer)
@@ -1196,9 +1210,11 @@ void updateRace()
 			// if the waiting is over
 			if (!waitingForClient)
 			{
+				// hard-coded for 2P
+
 				// tell everyone to start
-				sendBuf.type = 5;
-				sendBuf.size = 2;
+				CtrClient[0].sendBuf.type = 5;
+				CtrClient[0].sendBuf.size = 2;
 
 				// start the race
 				pauseUntilSync = false;

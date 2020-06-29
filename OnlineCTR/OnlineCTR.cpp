@@ -27,23 +27,29 @@ HANDLE handle;
 bool pressingF9 = false;
 bool pressingF10 = false;
 
-#define TEST_DEBUG 0
+#define TEST_DEBUG 1
 
 struct Message
 {
 	// [server -> client]
 	// 0 for track index
+	//		track, driver index, num characters, characters
 	// 1 for lap index
+	//		row index
 	// 2 for Start Loading
+	//		[null]
 
 	// [bidirectional]
 	// 3 for position
+	//		posX, posY, posZ
 
 	// [client -> server]
 	// 4 for kart IDs
+	//		client character
 
 	// [bidirectional]
 	// 5 for start-line sync
+	//		[null]
 
 	unsigned char type;
 	unsigned char size;
@@ -65,7 +71,7 @@ SocketCtr CtrMain;
 SocketCtr CtrClient[MAX_CLIENTS];
 
 int receivedByteCount = 0;
-int clientCount = 0;
+unsigned char clientCount = 0;
 bool shutdownServer = false;
 
 // must be set to true after introAnim is 1
@@ -80,6 +86,8 @@ unsigned char trackID; // 0x163671A
 unsigned char trackVideoID; // 0x16379C8
 unsigned char LevelOfDetail; // 0xB0F85C
 unsigned long long menuState;
+unsigned char numPlayers = 0;
+unsigned char myDriverIndex = 0; // will never change on server
 
 // ID[0] is the server's character
 short characterIDs[8];
@@ -528,6 +536,9 @@ void ServerLookForClients()
 					clientCount++;
 					printf("Connection found, clientCount = %d\n", clientCount);
 
+					// set number of players, prevent extra AIs from spawning
+					numPlayers = clientCount + 1;
+
 					// Break out of the loop straight away
 					break;
 				}
@@ -566,6 +577,7 @@ void updateNetwork()
 			if (receivedByteCount == 0)
 			{
 				// disconnect
+				
 				printf("Someone disconnected\n");
 
 				// if this is not the last client
@@ -582,6 +594,7 @@ void updateNetwork()
 
 				clientCount--;
 				CtrClient[clientCount].socket = INVALID_SOCKET;
+				
 
 				continue;
 			}
@@ -593,9 +606,6 @@ void updateNetwork()
 
 				goto SendToClient;
 			}
-
-			// hard-coded for 2P
-			if (i != 0) goto SendToClient;
 
 			// By now, we can confirm we have a valid message
 
@@ -614,6 +624,9 @@ void updateNetwork()
 			// 3 means Position Message (same in server and client)
 			if (type == 3)
 			{
+				// hard-coded for 2P
+				if (i != 0) goto SendToClient;
+
 				// draw the first AI (index = 1)
 				// at the position that we get
 				drawAI(1, (int*)&CtrClient[i].recvBuf.data[0]);
@@ -632,8 +645,7 @@ void updateNetwork()
 				// Get characterID for this player
 				// for characters 0 - 7:
 				// CharacterID[i] : 0x1608EA4 + 2 * i
-				short kartID_short = (short)CtrClient[i].recvBuf.data[0];
-				characterIDs[1] = kartID_short;
+				characterIDs[i+1] = (short)CtrClient[i].recvBuf.data[0];
 
 #if TEST_DEBUG
 				printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size,
@@ -644,8 +656,10 @@ void updateNetwork()
 			// if the client "wants" to start the race
 			if (type == 5)
 			{
-				// this is hard-coded for one client
-				// needs to work with 7 clients
+				// hard-coded for 2P
+				if (i != 0) goto SendToClient;
+
+				// This should check all clients, not just one
 
 				// if all clients send a 5 message,
 				// then stop waiting and start race
@@ -761,22 +775,36 @@ void updateNetwork()
 		// 0 means track ID
 		if (type == 0)
 		{
+			// track, driver index, num characters, characters
+
 			// parse message
-			char trackByte = CtrMain.recvBuf.data[0];
-			char kartID =    CtrMain.recvBuf.data[1];
+			char trackByte =   CtrMain.recvBuf.data[0];
+			char driverIndex = CtrMain.recvBuf.data[1];
+			char numChars =    CtrMain.recvBuf.data[2];
 
 #if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d, -- %d %d\n", type, size, trackByte, kartID);
+			printf("Recv -- Tag: %d, size: %d, -- %d %d %d", type, size, trackByte, driverIndex, numChars);
+			for (int i = 0; i < numChars; i++)
+			{
+				printf(" %d", CtrMain.recvBuf.data[3 + i]);
+			}
+			printf("\n");
 #endif
 
 			char zero = 0;
 			char ogTrackByte = 0;
 
+			// save number of players
+			numPlayers = numChars + 1;
+
+			// save your index
+			myDriverIndex = driverIndex;
+
 			// Get characterID for this player
 			// for characters 0 - 7:
 			// CharacterID[i] : 0x1608EA4 + 2 * i
-			short kartID_short = (short)kartID;
-			characterIDs[1] = kartID_short;
+			for (int i = 0; i < numChars; i++)
+				characterIDs[i + 1] = CtrMain.recvBuf.data[3 + i];
 
 			// close the lapRowSelector
 			WriteMem(0x800B59AC, &zero, sizeof(char));
@@ -818,13 +846,19 @@ void updateNetwork()
 			// Client 2: 1 2 0 3 4 5 6 7
 			// Client 3: 1 2 3 0 4 5 6 7
 
-			// this will change when we have more than 2 players
+			// used to set your own spawn
 			char zero = 0;
 
-			// Change the spawn order (look at comments above)
-			// With only two players, this should be fine for now
-			WriteMem(0x80080F28 + 0, &one, sizeof(char));
-			WriteMem(0x80080F28 + 1, &zero, sizeof(char));
+			// loop through all drivers prior to your index
+			for (char i = 1; i <= myDriverIndex; i++)
+			{
+				char spawnValue = i - 1;
+
+				WriteMem(0x80080F28 + i, &spawnValue, sizeof(char));
+			}
+
+			// set your own index
+			WriteMem(0x80080F28, &myDriverIndex, sizeof(char));
 		}
 
 		// 2 means start loading, NOT DONE
@@ -937,17 +971,12 @@ void updateNetwork()
 void SendOnlinePlayersToRAM()
 {
 	// set number of players, prevent extra AIs from spawning
-	char numPlayers = 2;
 	WriteMem(0x8003B83C, &numPlayers, sizeof(numPlayers));
 
-	int numOnlinePlayers = numPlayers - 1;
-
-	int i = 1;
-
 	// put network characters into RAM
-	for (i; i < numOnlinePlayers + 1; i++)
+	for (unsigned char i = 1; i < numPlayers; i++)
 	{
-		char oneByte = (char)characterIDs[i];
+		char oneByte = (char)characterIDs[(int)i];
 		WriteMem(0x80086E84 + 2 * i, &oneByte, sizeof(char)); // 4, for 2 shorts
 	}
 }
@@ -988,23 +1017,10 @@ void ServerTrackHotkeys()
 		// set Video Address
 		WriteMem(0x800B59A8, &trackByte, sizeof(char));
 
-		// progress of video in menu
-		char videoProgress[3] = { 1, 1, 1 };
-
-		// keep hitting "down" until video refreshes and sets to zero
-		while (videoProgress[0] != 0 || videoProgress[1] != 0 || videoProgress[2] != 0)
-		{
-			// read to see the new memory, 12 bytes, 3 ints
-			ReadMem(0x8009EC28, &videoProgress[0], sizeof(char)); // first int
-			ReadMem(0x8009EC2C, &videoProgress[1], sizeof(char)); // next int
-			ReadMem(0x8009EC30, &videoProgress[2], sizeof(char)); // next int
-
-			// Hit the 'Down' button on controller
-			// 8008d2b0 -> 80096804
-			// + 0x14
-			char two = 2;
-			WriteMem(0x80096804 + 0x14, &two, sizeof(char));
-		}
+		// Set two variables to refresh the video
+		short s_One = 1;
+		WriteMem(0x800B59B8, &s_One, sizeof(short));
+		WriteMem(0x800B59BA, &s_One, sizeof(short));
 
 		// Not sure if I want the "random track" button to automatically open
 		// the lapRowSelector or not, but if we ever want it, here is the code
@@ -1055,12 +1071,25 @@ void SyncPlayersInMenus()
 			// send to all clients
 			for (int i = 0; i < clientCount; i++)
 			{
-				CtrClient[i].sendBuf.type = 0;
-				CtrClient[i].sendBuf.size = 4;
-				CtrClient[i].sendBuf.data[0] = trackID;
+				// track, driver index, num characters, characters
 
-				// hard-coded for 2P
-				CtrClient[i].sendBuf.data[1] = (char)characterIDs[0];
+				CtrClient[i].sendBuf.type = 0;
+				CtrClient[i].sendBuf.size = 5+clientCount;
+
+				CtrClient[i].sendBuf.data[0] = trackID;
+				CtrClient[i].sendBuf.data[1] = i+1;
+				CtrClient[i].sendBuf.data[2] = clientCount;
+
+				int j = 0;
+				int k = 0;
+				for (; j < clientCount+1; j++)
+				{
+					if (i == j-1)
+						continue;
+
+					CtrClient[i].sendBuf.data[3+k] = (char)characterIDs[j];
+					k++;
+				}
 			}
 		}
 
@@ -1155,9 +1184,7 @@ void preparePositionMessage()
 
 void updateRace()
 {
-	int numOnlinePlayers = 2;
-
-	for (int i = 1; i < numOnlinePlayers; i++)
+	for (int i = 1; i < numPlayers; i++)
 		disableAI_RenameThis(i);
 
 	// If not all racers are ready to start

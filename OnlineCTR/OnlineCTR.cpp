@@ -95,12 +95,12 @@ short characterIDs[8];
 
 bool isServer = false;
 bool isClient = false;
-bool pauseUntilSync = false;
 
-// used by server only
-// This is hardcoded to wait for one client
-// This needs to wait for 7 clients in the future
-bool waitingForClient[MAX_CLIENTS];
+bool startLine_wait = true;
+bool startLine_waitForClients[MAX_CLIENTS];
+
+bool trackSel_wait = true;
+bool trackSel_waitForClients[MAX_CLIENTS];
 
 int aiNavBackup[3] = { 0,0,0 };
 
@@ -406,6 +406,13 @@ void initialize()
 		// Setup the TCP listening socket
 		bind(CtrMain.socket, result->ai_addr, (int)result->ai_addrlen);
 
+		// setup the waiting gates
+		for (int i = 0; i < MAX_CLIENTS; i++)
+		{
+			trackSel_waitForClients[i] = true;
+			startLine_waitForClients[i] = true;
+		}
+
 		printf("Host ready\n\n");
 
 		// This waits infinitely until one client connects,
@@ -644,6 +651,16 @@ void updateNetwork()
 				// CharacterID[i] : 0x1608EA4 + 2 * i
 				characterIDs[i+1] = (short)CtrClient[i].recvBuf.data[0];
 
+				// This character is in track selection
+				trackSel_waitForClients[i] = false;
+
+				// temporarily set this to true
+				trackSel_wait = false;
+
+				// check if they're all done
+				for (int i = 0; i < clientCount; i++)
+					if (trackSel_waitForClients[i])
+						trackSel_wait = true;
 #if TEST_DEBUG
 				printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size,
 					CtrClient[i].recvBuf.data[0]);
@@ -655,7 +672,7 @@ void updateNetwork()
 			{
 				// if all clients send a 5 message,
 				// then stop waiting and start race
-				waitingForClient[i] = false;
+				startLine_waitForClients[i] = false;
 
 #if TEST_DEBUG
 				printf("Recv -- Tag: %d, size: %d\n", type, size);
@@ -724,10 +741,14 @@ void updateNetwork()
 	
 		// This NEEDS to move somewhere else
 
-		// draw the AIs
-		for (int i = 0; i < numPlayers - 1; i++)
+		// If the race is ready to start
+		if (!startLine_wait)
 		{
-			drawAI(i + 1, (int*)&CtrClient[i].pos[0]);
+			// draw the AIs
+			for (int i = 0; i < numPlayers - 1; i++)
+			{
+				drawAI(i + 1, (int*)&CtrClient[i].pos[0]);
+			}
 		}
 	}
 
@@ -869,7 +890,7 @@ void updateNetwork()
 #endif
 
 			// let the client know that we are trying to load a race
-			pauseUntilSync = true;
+			startLine_wait = true;
 
 			char one = 1;
 			char two = 2;
@@ -901,10 +922,14 @@ void updateNetwork()
 
 			// This NEEDS to move somewhere else
 
-			// draw all AIs
-			for (int i = 0; i < numPlayers - 1; i++)
+			// If race is ready to start
+			if (!startLine_wait)
 			{
-				drawAI(i+1, (int*)&CtrMain.recvBuf.data[12*i]);
+				// draw all AIs
+				for (int i = 0; i < numPlayers - 1; i++)
+				{
+					drawAI(i + 1, (int*)&CtrMain.recvBuf.data[12 * i]);
+				}
 			}
 		}
 
@@ -917,7 +942,7 @@ void updateNetwork()
 			printf("Recv -- Tag: %d, size: %d\n", type, size);
 #endif
 
-			pauseUntilSync = false;
+			startLine_wait = false;
 
 			// set controller mode to 1P, remove error message
 			char _1 = 1;
@@ -1047,18 +1072,6 @@ void SyncPlayersInMenus()
 	bool lapRowSelectorOpen = false;
 	ReadMem(0x800B59AC, &lapRowSelectorOpen, sizeof(bool));
 
-	// Dont get stuck with Waiting for players...
-	if (!lapRowSelectorOpen)
-	{
-		// If you are not waiting any more, then you must be synced,
-		// wow I need to rename these
-		pauseUntilSync = false;
-
-		// Disable "waiting for players"
-		char _1 = 1;
-		WriteMem(0x800987C9, &_1, sizeof(_1));
-	}
-
 	// if you are the server
 	if (isServer)
 	{
@@ -1075,7 +1088,7 @@ void SyncPlayersInMenus()
 			for (int i = 0; i < clientCount; i++)
 			{
 				// not waiting for them at starting-line
-				waitingForClient[i] = false;
+				startLine_waitForClients[i] = false;
 
 				// track, driver index, num characters, characters
 
@@ -1112,7 +1125,7 @@ void SyncPlayersInMenus()
 			if (menuA == 2 && menuB == 1)
 			{
 				// set the syncing variables
-				pauseUntilSync = true;
+				startLine_wait = true;
 
 				// Reset game frame counter to zero
 				int zero = 0;
@@ -1123,7 +1136,10 @@ void SyncPlayersInMenus()
 				for (int i = 0; i < clientCount; i++)
 				{
 					// wait for all at starting line
-					waitingForClient[i] = true;
+					startLine_waitForClients[i] = true;
+
+					// reset the waiting, for next time you select track
+					trackSel_waitForClients[i] = true;
 
 					// 2 means Start Loading
 					CtrClient[i].sendBuf.type = 2;
@@ -1234,7 +1250,7 @@ void updateRace()
 		disableAI_RenameThis(i);
 
 	// If not all racers are ready to start
-	if (pauseUntilSync)
+	if (startLine_wait)
 	{
 		// Set the traffic lights to be above the screen
 		// They are set to 3840 by default without modding
@@ -1261,7 +1277,7 @@ void updateRace()
 
 			for (int i = 0; i < clientCount; i++)
 			{
-				if (waitingForClient[i])
+				if (startLine_waitForClients[i])
 				{
 					everyoneReady = false;
 					break;
@@ -1279,7 +1295,7 @@ void updateRace()
 				}
 
 				// start the race
-				pauseUntilSync = false;
+				startLine_wait = false;
 			}
 		}
 	}
@@ -1427,6 +1443,27 @@ int main(int argc, char** argv)
 
 			// copy server menu state to client, and exchange character info
 			SyncPlayersInMenus();
+
+			// wait for all players before continuing
+			if (isServer)
+			{
+				if (trackSel_wait)
+				{
+					// set controller mode to 0P mode, trigger error message
+					char _0 = 0;
+					WriteMem(0x800987C9, &_0, sizeof(_0));
+
+					// change the error message
+					WriteMem(0x800BC684, (char*)"waiting for players...", 23);
+				}
+
+				else
+				{
+					// set controller mode to 0P mode, trigger error message
+					char _1 = 1;
+					WriteMem(0x800987C9, &_1, sizeof(_1));
+				}
+			}
 
 			// Restart the loop, don't proceed
 			continue;

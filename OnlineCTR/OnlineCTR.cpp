@@ -53,7 +53,7 @@ struct Message
 
 	unsigned char type;
 	unsigned char size;
-	char data[18];
+	char data[38];
 };
 
 struct SocketCtr
@@ -63,6 +63,7 @@ struct SocketCtr
 	Message sendBufPrev;
 	Message recvBuf;
 	Message recvBufPrev;
+	int pos[3];
 };
 
 #define MAX_CLIENTS 3
@@ -624,12 +625,8 @@ void updateNetwork()
 			// 3 means Position Message (same in server and client)
 			if (type == 3)
 			{
-				// hard-coded for 2P
-				if (i != 0) goto SendToClient;
-
-				// draw the first AI (index = 1)
-				// at the position that we get
-				drawAI(1, (int*)&CtrClient[i].recvBuf.data[0]);
+				// store a backup
+				memcpy(&CtrClient[i].pos[0], &CtrClient[i].recvBuf.data[0], 12);
 
 #if TEST_DEBUG
 				printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
@@ -723,6 +720,14 @@ void updateNetwork()
 				printf("Send -- Tag: %d, size: %d\n", type, size);
 			}
 #endif
+		}
+	
+		// This NEEDS to move somewhere else
+
+		// draw the AIs
+		for (int i = 0; i < numPlayers - 1; i++)
+		{
+			drawAI(i + 1, (int*)&CtrClient[i].pos[0]);
 		}
 	}
 
@@ -894,9 +899,13 @@ void updateNetwork()
 				*(int*)&CtrMain.recvBuf.data[8]);
 #endif
 
-			// draw the first AI (index = 1)
-			// at the position that we get
-			drawAI(1, (int*)&CtrMain.recvBuf.data[0]);
+			// This NEEDS to move somewhere else
+
+			// draw all AIs
+			for (int i = 0; i < numPlayers - 1; i++)
+			{
+				drawAI(i+1, (int*)&CtrMain.recvBuf.data[12*i]);
+			}
 		}
 
 		// message 4 will not come from server
@@ -1158,24 +1167,65 @@ void preparePositionMessage()
 {
 	Message* sendBuf;
 
-	// hard-coded, need to change
-	if (isServer) sendBuf = &CtrClient[0].sendBuf;
-	else          sendBuf = &CtrMain.sendBuf;
-
 	// Server sends to client
 	// Client sends to server
 	// 3 means Position Message
 
-	sendBuf->type = 3;
-	sendBuf->size = 14;
+	// server sending to client
+	if (isServer)
+	{
+		// place to store the server's pos
+		int myPos[MAX_CLIENTS+1];
 
-	// Get Player 1 position
-	// All players have 12-byte positions (4x3). 
-	// Changing those coordinates will not move
-	// the players. 
-	ReadMem(AddrP1 + 0x2D4, (int*)&sendBuf->data[0], sizeof(int));
-	ReadMem(AddrP1 + 0x2D8, (int*)&sendBuf->data[4], sizeof(int));
-	ReadMem(AddrP1 + 0x2DC, (int*)&sendBuf->data[8], sizeof(int));
+		// pointers to all positions of all players
+		int* pos[MAX_CLIENTS + 1];
+
+		// assign all pointers
+		pos[0] = myPos;
+		for(int i = 0; i < MAX_CLIENTS; i++)
+			pos[i+1] = CtrClient[i].pos;
+
+		// Get Player 1 position
+		// All players have 12-byte positions (4x3). 
+		// Changing those coordinates will not move
+		// the players. 
+		ReadMem(AddrP1 + 0x2D4, pos[0], sizeof(int)*3);
+
+		for (int i = 0; i < clientCount; i++)
+		{
+			sendBuf = &CtrClient[i].sendBuf;
+
+			sendBuf->type = 3;
+			sendBuf->size = 2 + 12 * clientCount;
+
+			int k = 0;
+
+			for (int j = 0; j < numPlayers; j++)
+			{
+				if (i == j - 1)
+					continue;
+
+				memcpy(&sendBuf->data[12 * k], pos[j], 12);
+
+				k++;
+			}
+		}
+	}
+	
+	// client sending to server
+	else
+	{
+		sendBuf = &CtrMain.sendBuf;
+
+		sendBuf->type = 3;
+		sendBuf->size = 14;
+
+		// Get Player 1 position
+		// All players have 12-byte positions (4x3). 
+		// Changing those coordinates will not move
+		// the players. 
+		ReadMem(AddrP1 + 0x2D4, (int*)&sendBuf->data[0], sizeof(int)*3);
+	}
 }
 
 void updateRace()

@@ -65,7 +65,7 @@ struct SocketCtr
 	Message recvBufPrev;
 };
 
-#define MAX_CLIENTS 8
+#define MAX_CLIENTS 3
 
 SocketCtr CtrMain;
 SocketCtr CtrClient[MAX_CLIENTS];
@@ -99,7 +99,7 @@ bool pauseUntilSync = false;
 // used by server only
 // This is hardcoded to wait for one client
 // This needs to wait for 7 clients in the future
-bool waitingForClient = false;
+bool waitingForClient[MAX_CLIENTS];
 
 int aiNavBackup[3] = { 0,0,0 };
 
@@ -656,14 +656,9 @@ void updateNetwork()
 			// if the client "wants" to start the race
 			if (type == 5)
 			{
-				// hard-coded for 2P
-				if (i != 0) goto SendToClient;
-
-				// This should check all clients, not just one
-
 				// if all clients send a 5 message,
 				// then stop waiting and start race
-				waitingForClient = false;
+				waitingForClient[i] = false;
 
 #if TEST_DEBUG
 				printf("Recv -- Tag: %d, size: %d\n", type, size);
@@ -1049,7 +1044,6 @@ void SyncPlayersInMenus()
 		// If you are not waiting any more, then you must be synced,
 		// wow I need to rename these
 		pauseUntilSync = false;
-		waitingForClient = false;
 
 		// Disable "waiting for players"
 		char _1 = 1;
@@ -1071,6 +1065,9 @@ void SyncPlayersInMenus()
 			// send to all clients
 			for (int i = 0; i < clientCount; i++)
 			{
+				// not waiting for them at starting-line
+				waitingForClient[i] = false;
+
 				// track, driver index, num characters, characters
 
 				CtrClient[i].sendBuf.type = 0;
@@ -1107,7 +1104,6 @@ void SyncPlayersInMenus()
 			{
 				// set the syncing variables
 				pauseUntilSync = true;
-				waitingForClient = true;
 
 				// Reset game frame counter to zero
 				int zero = 0;
@@ -1115,12 +1111,12 @@ void SyncPlayersInMenus()
 
 				inGame = false;
 
-				// hard-code
-				// should check if all players are ready before start
-
-				// 2 means Start Message, to all clients
 				for (int i = 0; i < clientCount; i++)
 				{
+					// wait for all at starting line
+					waitingForClient[i] = true;
+
+					// 2 means Start Loading
 					CtrClient[i].sendBuf.type = 2;
 					CtrClient[i].sendBuf.size = 2;
 				}
@@ -1211,14 +1207,25 @@ void updateRace()
 
 		if (isServer)
 		{
+			bool everyoneReady = true;
+
+			for (int i = 0; i < clientCount; i++)
+			{
+				if (waitingForClient[i])
+				{
+					everyoneReady = false;
+					break;
+				}
+			}
+
 			// if the waiting is over
-			if (!waitingForClient)
+			if (everyoneReady)
 			{
 				// tell everyone to start
 				for (int i = 0; i < clientCount; i++)
 				{
-					CtrClient[0].sendBuf.type = 5;
-					CtrClient[0].sendBuf.size = 2;
+					CtrClient[i].sendBuf.type = 5;
+					CtrClient[i].sendBuf.size = 2;
 				}
 
 				// start the race

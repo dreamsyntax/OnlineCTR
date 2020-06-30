@@ -1122,7 +1122,7 @@ void SyncPlayersInMenus()
 			// if race is starting
 			if (menuA == 2 && menuB == 1)
 			{
-				// set the syncing variables
+				// wait for all at starting line
 				startLine_wait = true;
 
 				// Reset game frame counter to zero
@@ -1135,9 +1135,6 @@ void SyncPlayersInMenus()
 				{
 					// wait for all at starting line
 					startLine_waitForClients[i] = true;
-
-					// reset the waiting, for next time you select track
-					trackSel_waitForClients[i] = true;
 
 					// 2 means Start Loading
 					CtrClient[i].sendBuf.type = 2;
@@ -1507,7 +1504,18 @@ int main(int argc, char** argv)
 
 				// if the intro animation is done
 				if (introAnimState == 0)
+				{
 					inGame = true;
+
+					if (isServer)
+					{
+						// reset for next time you select track
+						trackSel_wait = true;
+
+						for(int i = 0; i < MAX_CLIENTS; i++)
+							trackSel_waitForClients[i] = true;
+					}
+				}
 			}
 		}
 

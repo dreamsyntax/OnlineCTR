@@ -1,0 +1,42 @@
+OnlineCTR Terms and Conditions
+
+Section 1 - All uses of OnlineCTR software and source code
+
+1. You must not host a "Master Server" without consent from Niko.
+	There should only ever be one "Master Server" hosted at any given time.
+
+2. You must not modify or rebuild a "Dedicated Server" without consent from Niko,
+	this is for the saftey of all players, to prevent malware, trojans, or any attacks.
+
+3. You must not modify or rebuild a "Client" to give any unfair advantage to any player 
+	in a race, this does not require Niko's consent. This means you can change
+	the User Interface, you may port the client to any platform of your choosing, 
+	including Linux, Mac, PSP, Nintendo Switch, etc. 
+
+4. You understand that you will be terminated from the entire OnlineCTR project 
+	if any of "Section 1" terms and conditions are broken.
+
+Section 2 - Using the OnlineCTR client for gameplay
+
+1. You must legally own a copy of Crash Team Racing on PlayStation 1 (from any region).
+	This can be a CD, or a digital download on PSP or PS3 from PSN
+
+2. You must legally own a copy of Crash Team Racing: Nitro Fueled, 
+	on any platform that Activision supports, this can be physical or digital.
+
+3. You must not use mods or cheats, unless all players in your race agree
+	to use the same mods and cheats.
+
+4. All players in the same race must use the same version of Crash Team Racing, 
+	and you must use the same version of the same emulator, unless the
+	host of the "Dedicated Server" or "Room" allows variation.
+
+5. You understand that you will be banned from all public servers
+	if any of "Section 2" terms and conditions are broken.
+	
+"Modify" or "Modification" includes any change to the binary files, or changes 
+in the RAM addresses that the softwares use.
+
+Terminations may be temporary or permanent, the length of punishment 
+and severity of punishment will be determined by Niko
+

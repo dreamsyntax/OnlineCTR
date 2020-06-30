@@ -12,9 +12,6 @@
 #pragma comment (lib, "Mswsock.lib")
 #pragma comment (lib, "AdvApi32.lib")
 
-#include <cstdlib>
-#include <ctime>
-#include <thread>
 #include <time.h>
 #include <stdio.h>
 
@@ -571,8 +568,8 @@ void updateNetwork()
 		// check each client for message
 		for (int i = 0; i < clientCount; i++)
 		{
-			char type = 0xFF;
-			char size = 0xFF;
+			unsigned char type = 0xFF;
+			unsigned char size = 0xFF;
 
 			// Get a message
 			memset(&CtrClient[i].recvBuf, 0xFF, sizeof(Message));
@@ -748,8 +745,8 @@ void updateNetwork()
 
 	if (isClient)
 	{
-		char type = 0xFF;
-		char size = 0xFF;
+		unsigned char type = 0xFF;
+		unsigned char size = 0xFF;
 
 		// Get a message
 		memset(&CtrMain.recvBuf, 0xFF, sizeof(Message));

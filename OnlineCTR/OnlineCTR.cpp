@@ -635,6 +635,12 @@ void updateNetwork()
 				// store a backup
 				memcpy(&CtrClient[i].pos[0], &CtrClient[i].recvBuf.data[0], 12);
 
+				// draw the AIs
+				for (int i = 0; i < numPlayers - 1; i++)
+				{
+					drawAI(i + 1, (int*)&CtrClient[i].pos[0]);
+				}
+
 #if TEST_DEBUG
 				printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
 					*(int*)&CtrClient[i].recvBuf.data[0],
@@ -737,18 +743,6 @@ void updateNetwork()
 				printf("Send -- Tag: %d, size: %d\n", type, size);
 			}
 #endif
-		}
-	
-		// This NEEDS to move somewhere else
-
-		// If the race is ready to start
-		if (!startLine_wait)
-		{
-			// draw the AIs
-			for (int i = 0; i < numPlayers - 1; i++)
-			{
-				drawAI(i + 1, (int*)&CtrClient[i].pos[0]);
-			}
 		}
 	}
 
@@ -1001,6 +995,10 @@ void SendOnlinePlayersToRAM()
 {
 	// set number of players, prevent extra AIs from spawning
 	WriteMem(0x8003B83C, &numPlayers, sizeof(numPlayers));
+
+	// set number of icons (on the left of the screen)
+	if(numPlayers < 4)
+		WriteMem(0x800525A8, &numPlayers, sizeof(numPlayers));
 
 	// put network characters into RAM
 	for (unsigned char i = 1; i < numPlayers; i++)

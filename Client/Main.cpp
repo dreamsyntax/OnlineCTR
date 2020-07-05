@@ -23,8 +23,6 @@ HANDLE handle;
 
 int currButton = 0;
 int prevButton = 0;
-bool pressingF9 = false;
-bool pressingF10 = false;
 bool isHost = false;
 
 #define TEST_DEBUG 0
@@ -374,7 +372,9 @@ void initialize()
 
 	printf("Connected to server\n\n");
 
-	printf("Choose a character (hit F10 for random)\n");
+	printf("In Character Selection\n");
+	printf("Press L2 for Oxide\n");
+	printf("Press R2 for Random\n");
 	printf("\n");
 
 	// Unlock all cars and tracks immediately
@@ -471,8 +471,8 @@ void updateNetwork()
 			{
 				isHost = true;
 				printf("You are host, so you pick track\n");
-				printf("Press F9, then Up, for Battle Maps\n");
-				printf("Press F10 for random track\n");
+				printf("Press L2 for Battle Maps\n");
+				printf("Press R2 for Random Pick\n");
 				goto SendToServer;
 			}
 
@@ -691,33 +691,17 @@ void SendOnlinePlayersToRAM()
 
 void HostShortcutKeys()
 {
-	// There are better ways to do input,
-	// but it doesn't need to be perfect, it just needs to work
-	if (!GetAsyncKeyState(VK_F9)) pressingF9 = false;
+	int L2 = 0x100;
+	int R2 = 0x200;
+	prevButton = currButton;
+	ReadMem(0x8008d974, &currButton, 4);
 
-	// Enable Battle Tracks in Arcade
-	if (GetAsyncKeyState(VK_F9) && !pressingF9)
+	bool tapL2 = !(prevButton & L2) && (currButton & L2);
+	bool tapR2 = !(prevButton & R2) && (currButton & R2);
+
+	if (tapL2 || tapR2)
 	{
-		// this disables key-repeat
-		pressingF9 = true;
-
-		// Write 25 to the track selection menu, which brings us to battle tracks
-		char _25 = 25;
-		WriteMem(0x800B46FA, &_25, sizeof(_25));
-	}
-
-	// There are better ways to do input,
-	// but it doesn't need to be perfect, it just needs to work
-	if (!GetAsyncKeyState(VK_F10)) pressingF10 = false;
-
-	// Choose Random Track if you can't decide
-	if (GetAsyncKeyState(VK_F10) && !pressingF10)
-	{
-		// this disables key-repeat
-		pressingF10 = true;
-
-		// get random track
-		char trackByte = (char)roll(0, 17);
+		char trackByte = tapL2 ? 24 : (char)roll(0, 17);
 
 		// set Text+Map address 
 		WriteMem(0x800B46FA, &trackByte, sizeof(char));
@@ -729,14 +713,6 @@ void HostShortcutKeys()
 		short s_One = 1;
 		WriteMem(0x800B59B8, &s_One, sizeof(short));
 		WriteMem(0x800B59BA, &s_One, sizeof(short));
-
-		// Not sure if I want the "random track" button to automatically open
-		// the lapRowSelector or not, but if we ever want it, here is the code
-
-		// open the lapRowSelector
-		//char one = 1;
-		//WriteMem(0x800B59AC, &one, sizeof(char));
-
 	}
 }
 
@@ -749,7 +725,7 @@ void GetHostMenuState()
 	// if lap selector is closed
 	if (!lapRowSelectorOpen)
 	{
-		// F9 and F10 keys
+		// battle maps and random maps
 		HostShortcutKeys();
 
 		// Get Track ID, send it to clients

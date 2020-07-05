@@ -21,6 +21,8 @@
 long long int baseAddress;
 HANDLE handle;
 
+int currButton = 0;
+int prevButton = 0;
 bool pressingF9 = false;
 bool pressingF10 = false;
 bool isHost = false;
@@ -931,72 +933,52 @@ int main(int argc, char** argv)
 		// if you are in character selection menu
 		if (inCharSelection == 18100)
 		{
-			// if ePSXe
-			if (ePSXeModule != 0)
+			char penta = 0xD;
+			char oxide = 0xF;
+
+			// If you character ID is 0xF, then
+			// send cursor to penta's icon buffer.
+			// By default, it goes to Crash
+			WriteMem(0x800b50d2, &penta, 1);
+
+			char currID;
+			ReadMem(0x800B4F24, &currID, 1);
+
+
+			int L2 = 0x100;
+			int R2 = 0x200;
+			prevButton = currButton;
+			ReadMem(0x8008d974, &currButton, 4);
+
+			bool tapL2 = !(prevButton & L2) && (currButton & L2);
+			bool tapR2 = !(prevButton & R2) && (currButton & R2);
+
+			char a;
+			char b;
+			char c;
+			char d;
+			ReadMem(0x80086E84, &a, sizeof(char));
+			ReadMem(0x800B59F0, &b, sizeof(char));
+			ReadMem(0x800B59F8, &c, sizeof(char));
+			ReadMem(0x801FFEA8, &d, sizeof(char));
+
+			char oxideAnywhere = (a == 15 || b == 15 || c == 15 || d == 15);
+
+			// hide screen
+			char _10 = oxideAnywhere * 0x10;
+			WriteMem(0x800B4D45, &_10, 1);
+
+			// change icon
+			if (tapL2)
 			{
-				char f = 0xF;
-				unsigned char _80 = 0x80;
-				unsigned char _C0 = 0xC0;
-
-				// Write array of icon ids
-				WriteMem(0x800b50d2, &f, sizeof(f));
-
-				// Change Pura Nav to go "down" to Oxide
-				WriteMem(0x800B4ED9, &f, sizeof(f));
-
-				// Change Papu Nav to go "down" to Oxide
-				WriteMem(0x800B4F09, &f, sizeof(f));
-
-				// Move Komodo Joe
-				WriteMem(0x800B4F10, &_80, sizeof(_80));
-
-				// Move Penta Penguin
-				WriteMem(0x800B4F1C, &_C0, sizeof(_C0));
-
-				// Move Fake Crash, change nav to point to oxide
-				unsigned char fakeCrashData[8] = { 0x00, 0x01, 0xAE, 0x00, 0x06, 0x0E, 0x0D, 0x0F };
-				WriteMem(0x800B4F28, &fakeCrashData[0], 8);
-
-				// Change 3P's Crash Icon to 1P's Oxide Icon
-				unsigned char oxideData[10] = { 0x40, 0x01, 0xAE, 0x00, 0x07, 0x0F, 0x0E, 0x0B, 0x0F, 0x00 };
-				WriteMem(0x800B4F34, &oxideData[0], 10);
-
-				char _10 = 0x10;
-				WriteMem(0x800AE524, &_10, sizeof(char));
-				WriteMem(0x800AF398, &_10, sizeof(char));
-				WriteMem(0x800AF7C4, &_10, sizeof(char));
-
-				char a;
-				char b;
-				char c;
-				char d;
-				ReadMem(0x80086E84, &a, sizeof(char));
-				ReadMem(0x800B59F0, &b, sizeof(char));
-				ReadMem(0x800B59F8, &c, sizeof(char));
-				ReadMem(0x801FFEA8, &d, sizeof(char));
-
-				if (a == 15 || b == 15 || c == 15 || d == 15)
-				{
-					WriteMem(0x800B4D45, &_10, 1);
-				}
-
-				else
-				{
-					char zero = 0;
-					WriteMem(0x800B4D45, &zero, sizeof(char));
-				}
+				tapL2 = false;
+				WriteMem(0x800B4F24, (currID == penta) ? &oxide : &penta, 1);
 			}
 
-			// There are better ways to do input,
-			// but it doesn't need to be perfect, it just needs to work
-			if (!GetAsyncKeyState(VK_F10)) pressingF10 = false;
 
 			// Choose Random Track if you can't decide
-			if (GetAsyncKeyState(VK_F10) && !pressingF10)
+			if (tapR2)
 			{
-				// this disables key-repeat
-				pressingF10 = true;
-
 				// Get random kart
 				char kartByte = (char)roll(0, 0xF);
 				characterIDs[0] = kartByte;

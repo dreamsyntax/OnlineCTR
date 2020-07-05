@@ -73,7 +73,6 @@ short characterIDs[8];
 bool startLine_wait = true;
 #define MAX_PLAYERS 4
 bool trackSel_wait = true;
-bool trackSel_waitForClients[MAX_PLAYERS];
 
 unsigned int AddrP1 = 0;
 unsigned char gameStateCurr; // 0x161A871
@@ -396,9 +395,6 @@ void initialize()
 	WriteMem(0x80032888, &HighMpk, sizeof(short));
 	WriteMem(0x800328A4, &HighMpk, sizeof(short));
 	WriteMem(0x800328C0, &HighMpk, sizeof(short));
-
-	for (int i = 0; i < MAX_PLAYERS; i++)
-		trackSel_waitForClients[i] = true;
 }
 
 void disableAI_RenameThis(int aiNumber)
@@ -504,19 +500,8 @@ void updateNetwork()
 			// CharacterID[i] : 0x1608EA4 + 2 * i
 			for (int i = 0; i < numPlayers; i++)
 			{
-				// This character is in track selection
-				trackSel_waitForClients[i] = false;
-
 				characterIDs[i + 1] = CtrMain.recvBuf.data[3 + i];
 			}
-
-			// temporarily set this to true
-			trackSel_wait = false;
-
-			// check if they're all done
-			for (int i = 0; i < numPlayers; i++)
-				if (trackSel_waitForClients[i])
-					trackSel_wait = true;
 
 			// skip menu sync if you are host
 			if (isHost) goto SendToServer;
@@ -1077,12 +1062,6 @@ int main(int argc, char** argv)
 				if (introAnimState == 0)
 				{
 					inGame = true;
-
-					// used by host
-					trackSel_wait = true;
-
-					for (int i = 0; i < numPlayers; i++)
-						trackSel_waitForClients[i] = true;
 				}
 			}
 		}

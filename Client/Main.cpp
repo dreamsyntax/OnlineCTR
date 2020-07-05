@@ -25,7 +25,7 @@ bool pressingF9 = false;
 bool pressingF10 = false;
 bool isHost = false;
 
-#define TEST_DEBUG 1
+#define TEST_DEBUG 0
 
 struct Message
 {

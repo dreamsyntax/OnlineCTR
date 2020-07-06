@@ -260,16 +260,16 @@ void initialize()
 	GetWindowRect(console, &r); //stores the console's current dimensions
 
 	// 300 + height of bar (25)
-	MoveWindow(console, r.left, r.top, 400, 325, TRUE);
+	MoveWindow(console, r.left, r.top, 400, 240+35, TRUE);
 
 	// Initialize random number generator
 	srand((unsigned int)time(NULL));
 
 	printf("\n");
 	printf("Step 1: Open any ps1 emulator\n");
-	printf("Step 2: Open Crash Team Racing SCUS_94426\n");
-	printf("Step 3: Go to character selection\n");
-	printf("Step 4: Save a state (F1), then load it (F3)\n");
+	printf("Step 2: Open CTR SCUS_94426\n");
+	printf("Step 3: Go to Arcade->1P->Easy\n");
+	printf("Step 4: Save state, then load it, (required)\n");
 	printf("\n");
 	printf("Step 5: Enter emulator PID from 'Details'\n");
 	printf("           tab of Windows Task Manager\n");
@@ -580,6 +580,7 @@ void updateNetwork()
 			WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
 
 			inGame = false;
+			startLine_wait = true;
 
 			// This message will include number of players
 			// and array of characterIDs, save it for later
@@ -791,68 +792,6 @@ void SendCharacterID()
 	CtrMain.sendBuf.data[0] = (char)characterIDs[0];
 }
 
-void preparePositionMessage()
-{
-	Message* sendBuf;
-
-	// Server sends to client
-	// Client sends to server
-	// 3 means Position Message
-	
-	// client sending to server
-
-	sendBuf = &CtrMain.sendBuf;
-
-	sendBuf->type = 3;
-	sendBuf->size = 14;
-
-	// Get Player 1 position
-	// All players have 12-byte positions (4x3). 
-	// Changing those coordinates will not move
-	// the players. 
-	ReadMem(AddrP1 + 0x2D4, (int*)&sendBuf->data[0], sizeof(int)*3);
-}
-
-void updateRace()
-{
-	for (int i = 1; i < numPlayers; i++)
-		disableAI_RenameThis(i);
-
-	// If not all racers are ready to start
-	if (startLine_wait)
-	{
-		// Set the traffic lights to be above the screen
-		// They are set to 3840 by default without modding
-		short wait = 4500;
-		WriteMem(0x8009882C, &wait, sizeof(short));
-
-		// set controller mode to 0P mode, trigger error message
-		char _0 = 0;
-		WriteMem(0x800987C9, &_0, sizeof(_0));
-
-		// change the error message
-		WriteMem(0x800BC684, (char*)"waiting for players...", 23);
-
-		// client "wants" to start
-		CtrMain.sendBuf.type = 5;
-		CtrMain.sendBuf.size = 2;
-	}
-
-	// if everyone is ready to start
-	else
-	{
-		// set controller mode to 1P mode, disable error message
-		// The message gets enabled lower in the code
-		char _1 = 1;
-		WriteMem(0x800987C9, &_1, sizeof(_1));
-
-		// Send your player's position to the server (or client)
-		// If you are the client, this sends to server, DONE
-		// If you are the server, this sends to one client, NOT DONE
-		preparePositionMessage();
-	}
-}
-
 int main(int argc, char** argv)
 {
 	/*union
@@ -883,6 +822,7 @@ int main(int argc, char** argv)
 		// good for your CPU
 		Sleep(5);
 
+		// get address of 0x670-byte racer struct
 		ReadMem(0x8009900C, &AddrP1, sizeof(AddrP1));
 
 		// handle all message reading and writing
@@ -1044,19 +984,65 @@ int main(int argc, char** argv)
 
 		if(inGame)
 		{
-			// This commented-out code wont work in ePSXe
-			// due to how ASM is cached, but it works in 
-			// Bizhawk, should it be used at all?
+			// disable player collision by removing function pointer
+			int zero = 0;
+			WriteMem(AddrP1 + 0x70, &zero, sizeof(int));
 
-			/*int playerFlags = 0;
-			ReadMem(AddrP1 + 0x2c8, &playerFlags, sizeof(int));
-			if ((playerFlags & 0x2000000) != 0)
+			for (int i = 1; i < numPlayers; i++)
+				disableAI_RenameThis(i);
+
+			// If not all racers are ready to start
+			if (startLine_wait)
 			{
-				// Enable AIs properly to take over
-				EnableAI();
-			}*/
+				// Set the traffic lights to be above the screen
+				// They are set to 3840 by default without modding
+				short wait = 4500;
+				WriteMem(0x8009882C, &wait, sizeof(short));
 
-			updateRace();
+				// set controller mode to 0P mode, trigger error message
+				char _0 = 0;
+				WriteMem(0x800987C9, &_0, sizeof(_0));
+
+				// change the error message
+				WriteMem(0x800BC684, (char*)"waiting for players...", 23);
+
+				// client "wants" to start
+				CtrMain.sendBuf.type = 5;
+				CtrMain.sendBuf.size = 2;
+			}
+
+			// if everyone is ready to start
+			else
+			{
+				// set controller mode to 1P mode, disable error message
+				// The message gets enabled lower in the code
+				char _1 = 1;
+				WriteMem(0x800987C9, &_1, sizeof(_1));
+
+				int flags;
+				ReadMem(0x80096B20, &flags, sizeof(int));
+
+				// if you are still in gameplay
+				if (flags == 0x400000 || flags == 0x400040)
+				{
+					CtrMain.sendBuf.type = 3;
+					CtrMain.sendBuf.size = 14;
+
+					// Get Player 1 position
+					// All players have 12-byte positions (4x3). 
+					// Changing those coordinates will not move
+					// the players. 
+					ReadMem(AddrP1 + 0x2D4, (int*)&CtrMain.sendBuf.data[0], sizeof(int) * 3);
+				}
+
+				// if you finished or left the race
+				else
+				{
+					inGame = false;
+					CtrMain.sendBuf.type = 6;
+					CtrMain.sendBuf.size = 2;
+				}
+			}
 		}
 	}
 

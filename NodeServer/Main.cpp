@@ -153,7 +153,7 @@ void initialize()
 	GetWindowRect(console, &r); //stores the console's current dimensions
 
 	// 300 + height of bar (25)
-	MoveWindow(console, r.left, r.top, 400, 325, TRUE);
+	MoveWindow(console, r.left, r.top, 400, 240+35, TRUE);
 
 	WSADATA wsaData;
 	int iResult;
@@ -327,6 +327,18 @@ void HandleClient(int i)
 #endif
 	}
 
+	// if the client "wants" to start the race
+	if (type == 6)
+	{
+		// if all clients send a 5 message,
+		// then stop waiting and start race
+		startLine.clientsHere[i] = false;
+
+#if TEST_DEBUG
+		printf("Recv -- Tag: %d, size: %d\n", type, size);
+#endif
+	}
+
 SendToClient:
 
 	// dont send the same message twice, 
@@ -436,9 +448,6 @@ void SyncPlayersInMenus()
 	// if you get a '2' message from host
 	else if (CtrClient[0].recvBuf.type == 2)
 	{
-		// wait for everyone at starting line
-		startLine.reset();
-
 		// send to all "other" clients
 		for (int i = 1; i < clientCount; i++)
 		{
@@ -484,7 +493,7 @@ int main(int argc, char** argv)
 	while (true)
 	{
 		// good for your CPU
-		Sleep(1);
+		Sleep(5);
 
 		if (!inGame)
 		{
@@ -512,16 +521,27 @@ int main(int argc, char** argv)
 					CtrClient[i].sendBuf.size = 2;
 				}
 
-				// erase data for next race
-				startLine.reset();
-
-				// you are now racing
 				inGame = true;
+
+#ifdef TEST_DEBUG
+				// you are now racing
+				printf("You are now racing\n");
+#endif
 			}
 		}
 
 		if (inGame)
 		{
+			if (!startLine.anyoneHere())
+			{
+				inGame = false;
+
+#ifdef TEST_DEBUG
+				// you are now in menus
+				printf("You are now in menus\n");
+#endif
+			}
+
 			// check each client for message
 			for (int i = 0; i < clientCount; i++)
 			{

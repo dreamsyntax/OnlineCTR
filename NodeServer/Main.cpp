@@ -82,6 +82,7 @@ struct SocketCtr
 	Message recvBuf;
 	Message recvBufPrev;
 	int pos[3];
+	bool needCompress;
 };
 
 SocketCtr CtrMain;
@@ -536,7 +537,7 @@ int main(int argc, char** argv)
 
 				inGame = true;
 
-#ifdef TEST_DEBUG
+#if TEST_DEBUG
 				// you are now racing
 				printf("You are now racing\n");
 #endif
@@ -549,7 +550,7 @@ int main(int argc, char** argv)
 			{
 				inGame = false;
 
-#ifdef TEST_DEBUG
+#if TEST_DEBUG
 				// you are now in menus
 				printf("You are now in menus\n");
 #endif

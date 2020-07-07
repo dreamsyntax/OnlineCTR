@@ -62,6 +62,7 @@ struct SocketCtr
 	Message recvBuf;
 	Message recvBufPrev;
 	int pos[3];
+	bool needCompress;
 };
 
 SocketCtr CtrMain;
@@ -392,8 +393,12 @@ void initialize()
 	WriteMem(0x80032840, &zero, sizeof(int));
 
 	short HighMpk = 0x00F2;
-	for (int i = 0; i < 4; i++)
-		WriteMem(0x80032888 + 0x1c * i, &HighMpk, sizeof(short));
+
+	// Only first 3 characters are high lod
+	// Leave 4th as low, or everything breaks
+	WriteMem(0x80032888, &HighMpk, sizeof(short));
+	WriteMem(0x800328A4, &HighMpk, sizeof(short));
+	WriteMem(0x800328C0, &HighMpk, sizeof(short));
 }
 
 void disableAI_RenameThis(int aiNumber)

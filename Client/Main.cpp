@@ -1022,8 +1022,9 @@ int main(int argc, char** argv)
 				int flags;
 				ReadMem(0x80096B20, &flags, sizeof(int));
 
-				// if you are still in gameplay
-				if (flags == 0x400000 || flags == 0x400040)
+				// if you are still in gameplay,
+				// Arcade mode, or Arcade + Intro, or Arcade + Weapon
+				if (flags == 0x400000 || flags == 0x400040 || flags == 0xC00000)
 				{
 					CtrMain.sendBuf.type = 3;
 					CtrMain.sendBuf.size = 14;

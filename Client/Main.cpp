@@ -816,11 +816,21 @@ int main(int argc, char** argv)
 
 	initialize();
 
+	clock_t start = clock();
+	clock_t end = clock();
+
 	// Main loop...
 	while (true)
 	{
-		// good for your CPU
-		Sleep(5);
+		// end of previous cycle
+		end = clock();
+
+		// If you finished in less than 16ms (1/60 second) 
+		int ms = end - start;
+		if (ms < 16) Sleep(16 - ms);
+
+		// start of next cycle
+		start = clock();
 
 		// get address of 0x670-byte racer struct
 		ReadMem(0x8009900C, &AddrP1, sizeof(AddrP1));
@@ -985,8 +995,9 @@ int main(int argc, char** argv)
 		if(inGame)
 		{
 			// disable player collision by removing function pointer
-			int zero = 0;
-			WriteMem(AddrP1 + 0x70, &zero, sizeof(int));
+			// also disables all turbo pads
+			//int zero = 0;
+			//WriteMem(AddrP1 + 0x70, &zero, sizeof(int));
 
 			for (int i = 1; i < numPlayers; i++)
 				disableAI_RenameThis(i);

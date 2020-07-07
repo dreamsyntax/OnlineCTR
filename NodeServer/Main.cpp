@@ -489,9 +489,22 @@ int main(int argc, char** argv)
 {
 	initialize();
 
+	clock_t start = clock();
+	clock_t end = clock();
+
 	// Main loop...
 	while (true)
 	{
+		// end of previous cycle
+		end = clock();
+
+		// If you finished in less than 16ms (1/60 second) 
+		int ms = end - start;
+		if (ms < 16) Sleep(16 - ms);
+
+		// start of next cycle
+		start = clock();
+
 		// good for your CPU
 		Sleep(5);
 

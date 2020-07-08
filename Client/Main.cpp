@@ -301,7 +301,7 @@ void initialize()
 	// of any emulator universally, was EuroAli's idea in the
 	// CTR-Tools discord server. Thank you EuroAli
 
-	// Shows at PSX address 0x8003C62D, only in CTR 94426
+	// Shows at PSX address 0x8003C62C, only in CTR 94426
 	unsigned char ctrData[12] = { 0x71, 0xDC, 0x01, 0x0C, 0x00, 0x00, 0x00, 0x00, 0xD0, 0xF9, 0x00, 0x0C };
 
 	// can't be nullptr by default or it crashes,
@@ -313,13 +313,13 @@ void initialize()
 		Hyperscan::HyperscanTypeExact);
 
 	// Copy the result, need to add 1 for some reason
-	baseAddress = AddressHolder[0] + 1;
+	baseAddress = AddressHolder[0];
 
-	// Remove 0x8003C62D address of PSX memory,
+	// Remove 0x8003C62C address of PSX memory,
 	// to find the relative address where PSX memory
 	// is located in RAM. It is ok for baseAddress
 	// to be a negative number
-	baseAddress -= 0x8003C62D;
+	baseAddress -= 0x8003C62C;
 
 	// name of the server that you connect to
 	char* serverName = nullptr;

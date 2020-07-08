@@ -123,14 +123,17 @@ int main()
 #if 0	
 	FindBaseAddr();
 	
-// This wont work
-#elif 0
-	printf("Enter base address: ");
-	scanf("%16X", &baseAddress); // long int with hex
-	
-// This works, but this stinks
+// This works but kinda annoying
 #else
-	baseAddress = 0x7f63c17df62c;
+	printf("Use GameConqueror to open your emulator\n");
+	printf("And search for the following byte array:\n");
+	printf("71 DC 01 0C 00 00 00 00 D0 F9 00 0C\n\n");
+
+	std::string str;
+	std::cout << "Enter address (include 0x before hex): ";
+	std::getline (std::cin,str);
+	unsigned long ul = std::stoul (str,nullptr,0);
+	baseAddress = ul;
 #endif
 
 	baseAddress -= 0x8003C62C;

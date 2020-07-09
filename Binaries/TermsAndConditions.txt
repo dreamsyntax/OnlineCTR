@@ -6,7 +6,7 @@ Section 1 - All uses of OnlineCTR software and source code
 	There should only ever be one "Master Server" hosted at any given time.
 
 2. You must not modify or rebuild a "Dedicated Server" without consent from Niko,
-	this is for the saftey of all players, to prevent malware, trojans, or any attacks.
+	this is for the safety of all players, to prevent malware, trojans, or any attacks.
 
 3. You must not modify or rebuild a "Client" to give any unfair advantage to any player 
 	in a race, this does not require Niko's consent. This means you can change

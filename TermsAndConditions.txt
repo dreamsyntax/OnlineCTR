@@ -6,7 +6,7 @@ Section 1 - All uses of OnlineCTR software and source code
 	There should only ever be one "Master Server" hosted at any given time.
 
 2. You must not modify or rebuild a "Dedicated Server" without consent from Niko,
-	this is for the saftey of all players, to prevent malware, trojans, or any attacks.
+	this is for the safety of all players, to prevent malware, trojans, or any attacks.
 
 3. You must not modify or rebuild a "Client" to give any unfair advantage to any player 
 	in a race, this does not require Niko's consent. This means you can change
@@ -15,14 +15,18 @@ Section 1 - All uses of OnlineCTR software and source code
 
 4. You understand that you will be terminated from the entire OnlineCTR project 
 	if any of "Section 1" terms and conditions are broken.
+	
+5. You may use 100% of the source code for any open-source project that does not 
+	compete with the popularity of OnlineCTR. Source code may be used in 
+	closed-source projects if permission is granted by Niko (nprocopi2017@gmail.com).
 
 Section 2 - Using the OnlineCTR client for gameplay
 
 1. You must legally own a copy of Crash Team Racing on PlayStation 1 (from any region).
 	This can be a CD, or a digital download on PSP or PS3 from PSN
 
-2. You must legally own a copy of Crash Team Racing: Nitro Fueled, 
-	on any platform that Activision supports, this can be physical or digital.
+2. You must legally own a copy of Crash Team Racing: Nitro Fueled, on any platform that 
+	Activision supports, this can be physical or digital.
 
 3. You must not use mods or cheats, unless all players in your race agree
 	to use the same mods and cheats.
@@ -33,6 +37,11 @@ Section 2 - Using the OnlineCTR client for gameplay
 
 5. You understand that you will be banned from all public servers
 	if any of "Section 2" terms and conditions are broken.
+	
+All terms and conditions are subject to change, and are not guaranteed to be 
+final or permanent. For example, section 1-5 will be altered if OnlineCTR is 
+abandoned by the developers, and section 2-2 will be removed when there is no 
+risk of OnlineCTR damaging the sales of Crash Team Racing: Nitro Fueled.
 	
 "Modify" or "Modification" includes any change to the binary files, or changes 
 in the RAM addresses that the softwares use.

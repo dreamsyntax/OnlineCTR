@@ -227,11 +227,130 @@ void CheckForNewClients()
 	}
 }
 
+// globals
+unsigned char type = 0xFF;
+unsigned char size = 0xFF;
+
+void RecvTrackMessage(int sender)
+{
+	unsigned char trackID = CtrClient[sender].recvBuf.data[0];
+	characterIDs[0] =		CtrClient[sender].recvBuf.data[1];
+
+	// send to all clients, since it includes characters
+	for (int i = 0; i < clientCount; i++)
+	{
+		// track, driver index, num characters, characters
+
+		CtrClient[i].sendBuf.type = 0;
+		CtrClient[i].sendBuf.size = 5 + clientCount;
+
+		CtrClient[i].sendBuf.data[0] = trackID;
+		CtrClient[i].sendBuf.data[1] = i;
+		CtrClient[i].sendBuf.data[2] = clientCount;
+
+		int j = 0;
+		int k = 0;
+		for (; j < clientCount; j++)
+		{
+			if (i == j)
+				continue;
+
+			CtrClient[i].sendBuf.data[3 + k] = (char)characterIDs[j];
+			k++;
+		}
+	}
+}
+
+void RecvLapMessage(int sender)
+{
+	// send info to all "other" players
+	for (int i = 0; i < clientCount; i++)
+	{
+		// dont send to yourself
+		if (i == sender) continue;
+
+		// lap messages are 3 bytes large
+		memcpy(&CtrClient[i].sendBuf, &CtrClient[sender].recvBuf, 3);
+	}
+}
+
+void RecvStartLoadingMessage(int sender)
+{
+	// send to all "other" clients
+	for (int i = 1; i < clientCount; i++)
+	{
+		// dont send to yourself
+		if (i == sender) continue;
+
+		// start race is 2 bytes large
+		memcpy(&CtrClient[i].sendBuf, &CtrClient[sender].recvBuf, 2);
+	}
+}
+
+void RecvPosMessage(int sender)
+{
+	// store a backup
+	memcpy(&CtrClient[sender].pos[0], &CtrClient[sender].recvBuf.data[0], 12);
+
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
+		*(int*)&CtrClient[sender].recvBuf.data[0],
+		*(int*)&CtrClient[sender].recvBuf.data[4],
+		*(int*)&CtrClient[sender].recvBuf.data[8]);
+#endif
+}
+
+void RecvCharacterMesssage(int sender)
+{
+	// Get characterID for this player
+	// for characters 0 - 7:
+	// CharacterID[i] : 0x1608EA4 + 2 * i
+	characterIDs[sender] = (short)CtrClient[sender].recvBuf.data[0];
+
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size,
+		CtrClient[sender].recvBuf.data[0]);
+#endif
+}
+
+void RecvStartRaceMessage(int sender)
+{
+	// if all clients send a 5 message,
+	// then stop waiting and start race
+	startLine.clientsHere[sender] = true;
+
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d\n", type, size);
+#endif
+}
+
+void RecvReturnToMenuMessage(int sender)
+{
+	// if all clients send a 5 message,
+	// then stop waiting and start race
+	startLine.clientsHere[sender] = false;
+
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d\n", type, size);
+#endif
+}
+
+void (*RecvMessage[7])(int sender) =
+{
+	// These will only be received by the host
+	RecvTrackMessage,
+	RecvLapMessage,
+	RecvStartLoadingMessage,
+
+	// These are gotten by all
+	RecvPosMessage,
+	RecvCharacterMesssage,
+	RecvStartRaceMessage,
+	RecvReturnToMenuMessage,
+};
+
 void HandleClient(int i)
 {
-	unsigned char type = 0xFF;
-	unsigned char size = 0xFF;
-
 	// Get a message
 	memset(&CtrClient[i].recvBuf, 0xFF, sizeof(Message));
 	receivedByteCount = recv(CtrClient[i].socket, (char*)&CtrClient[i].recvBuf, sizeof(Message), 0);
@@ -288,57 +407,9 @@ void HandleClient(int i)
 	type = CtrClient[i].recvBuf.type;
 	size = CtrClient[i].recvBuf.size;
 
-	// 3 means Position Message (same in server and client)
-	if (type == 3)
-	{
-		// store a backup
-		memcpy(&CtrClient[i].pos[0], &CtrClient[i].recvBuf.data[0], 12);
+	// parse message, depending on type
+	RecvMessage[type](i);
 
-#if TEST_DEBUG
-		printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
-			*(int*)&CtrClient[i].recvBuf.data[0],
-			*(int*)&CtrClient[i].recvBuf.data[4],
-			*(int*)&CtrClient[i].recvBuf.data[8]);
-#endif
-	}
-
-	// 4 means Kart ID
-	if (type == 4)
-	{
-		// Get characterID for this player
-		// for characters 0 - 7:
-		// CharacterID[i] : 0x1608EA4 + 2 * i
-		characterIDs[i] = (short)CtrClient[i].recvBuf.data[0];
-
-#if TEST_DEBUG
-		printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size,
-			CtrClient[i].recvBuf.data[0]);
-#endif
-	}
-
-	// if the client "wants" to start the race
-	if (type == 5)
-	{
-		// if all clients send a 5 message,
-		// then stop waiting and start race
-		startLine.clientsHere[i] = true;
-
-#if TEST_DEBUG
-		printf("Recv -- Tag: %d, size: %d\n", type, size);
-#endif
-	}
-
-	// if the client "wants" to start the race
-	if (type == 6)
-	{
-		// if all clients send a 5 message,
-		// then stop waiting and start race
-		startLine.clientsHere[i] = false;
-
-#if TEST_DEBUG
-		printf("Recv -- Tag: %d, size: %d\n", type, size);
-#endif
-	}
 
 SendToClient:
 
@@ -400,63 +471,6 @@ SendToClient:
 #endif
 }
 
-void SyncPlayersInMenus()
-{
-	// warning, if you dont get message 0 from host,
-	// then non-hosts wont get characters of nonhosts
-
-	// if the last message you got from host was '0' message
-	if (CtrClient[0].recvBuf.type == 0)
-	{
-		unsigned char trackID = CtrClient[0].recvBuf.data[0];
-		characterIDs[0] = CtrClient[0].recvBuf.data[1];
-
-		// send to all clients, since it includes characters
-		for (int i = 0; i < clientCount; i++)
-		{
-			// track, driver index, num characters, characters
-
-			CtrClient[i].sendBuf.type = 0;
-			CtrClient[i].sendBuf.size = 5 + clientCount;
-
-			CtrClient[i].sendBuf.data[0] = trackID;
-			CtrClient[i].sendBuf.data[1] = i;
-			CtrClient[i].sendBuf.data[2] = clientCount;
-
-			int j = 0;
-			int k = 0;
-			for (; j < clientCount; j++)
-			{
-				if (i == j)
-					continue;
-
-				CtrClient[i].sendBuf.data[3 + k] = (char)characterIDs[j];
-				k++;
-			}
-		}
-	}
-
-	// if last message was a '1' message
-	else if (CtrClient[0].recvBuf.type == 1)
-	{
-		// send info to all "other" players
-		for (int i = 1; i < clientCount; i++)
-		{
-			memcpy(&CtrClient[i].sendBuf, &CtrClient[0].recvBuf, 3);
-		}
-	}
-
-	// if you get a '2' message from host
-	else if (CtrClient[0].recvBuf.type == 2)
-	{
-		// send to all "other" clients
-		for (int i = 1; i < clientCount; i++)
-		{
-			memcpy(&CtrClient[i].sendBuf, &CtrClient[0].recvBuf, 2);
-		}
-	}
-}
-
 void preparePositionMessage()
 {
 	Message* sendBuf;
@@ -513,14 +527,8 @@ int main(int argc, char** argv)
 		{
 			CheckForNewClients();
 
-			// first client is the host
-			HandleClient(0);
-
-			// use the host's messages
-			SyncPlayersInMenus();
-
 			// send data to clients
-			for (int i = 1; i < clientCount; i++)
+			for (int i = 0; i < clientCount; i++)
 			{
 				HandleClient(i);
 			}

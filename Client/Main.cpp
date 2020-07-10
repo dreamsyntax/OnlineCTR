@@ -427,10 +427,182 @@ void drawAI(int aiNumber, int* netPos)
 	WriteMem(AddrAI + 0x5f8, &netPos[2], sizeof(int));
 }
 
+// globals
+unsigned char type = 0xFF;
+unsigned char size = 0xFF;
+
+void RecvTrackMessage()
+{
+	if (size == 2)
+	{
+		isHost = true;
+		printf("You are host, so you pick track\n");
+		printf("Press L2 for Battle Maps\n");
+		printf("Press R2 for Random Pick\n");
+		return;
+	}
+
+	// track, driver index, num characters, characters
+
+	// parse message
+	char trackByte = CtrMain.recvBuf.data[0];
+	myDriverIndex = CtrMain.recvBuf.data[1];
+	numPlayers = CtrMain.recvBuf.data[2];
+
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d, -- %d %d %d", type, size, trackByte, myDriverIndex, numPlayers);
+	for (int i = 0; i < numPlayers - 1; i++)
+	{
+		printf(" %d", CtrMain.recvBuf.data[3 + i]);
+	}
+	printf("\n");
+#endif
+
+	char zero = 0;
+	char ogTrackByte = 0;
+
+	// Get characterID for this player
+	// for characters 0 - 7:
+	// CharacterID[i] : 0x1608EA4 + 2 * i
+	for (int i = 0; i < numPlayers; i++)
+	{
+		characterIDs[i + 1] = CtrMain.recvBuf.data[3 + i];
+	}
+
+	// skip menu sync if you are host
+	if (isHost) return;
+
+	// close the lapRowSelector
+	WriteMem(0x800B59AC, &zero, sizeof(char));
+
+	// Get original track byte
+	ReadMem(0x800B46FA, &ogTrackByte, sizeof(char));
+
+	// set Text+Map address 
+	WriteMem(0x800B46FA, &trackByte, sizeof(char));
+
+	// set Video Address
+	WriteMem(0x800B59A8, &trackByte, sizeof(char));
+
+	// Set two variables to refresh the video
+	short s_One = 1;
+	WriteMem(0x800B59B8, &s_One, sizeof(short));
+	WriteMem(0x800B59BA, &s_One, sizeof(short));
+}
+
+void RecvLapMessage()
+{
+	// open the lapRowSelector menu, 
+	char one = 1;
+	WriteMem(0x800B59AC, &one, sizeof(char));
+
+	// convert to one byte
+	char lapByte = CtrMain.recvBuf.data[0];
+	WriteMem(0x8008D920, &lapByte, sizeof(lapByte));
+
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size, lapByte);
+#endif
+
+	// change the spawn order
+
+	// Client 0:       0 1 2 3 4 5 6 7
+	// Client 1: 1 0       2 3 4 5 6 7
+	// Client 2: 2 0 1       3 4 5 6 7
+	// Client 3: 3 0 1 2       4 5 6 7
+
+	// used to set your own spawn
+	char zero = 0;
+
+	// loop through all drivers prior to your index
+	for (char i = 1; i <= myDriverIndex; i++)
+	{
+		char spawnValue = i - 1;
+
+		WriteMem(0x80080F28 + i, &spawnValue, sizeof(char));
+	}
+
+	// set your own index
+	WriteMem(0x80080F28, &myDriverIndex, sizeof(char));
+}
+
+void RecvStartLoadingMessage()
+{
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d\n", type, size);
+#endif
+
+	char one = 1;
+	char two = 2;
+
+	// set menuA to 2 and menuB to 1,
+	WriteMem(0x800B59AE, &two, sizeof(char));
+	WriteMem(0x800B59B0, &one, sizeof(char));
+
+	// Reset game frame counter to zero
+	int zero = 0;
+	WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
+
+	inGame = false;
+	startLine_wait = true;
+
+	// This message will include number of players
+	// and array of characterIDs, save it for later
+	// Stop looking for messages until later
+}
+
+void RecvPosMessage()
+{
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
+		*(int*)&CtrMain.recvBuf.data[0],
+		*(int*)&CtrMain.recvBuf.data[4],
+		*(int*)&CtrMain.recvBuf.data[8]);
+#endif
+
+	// This NEEDS to move somewhere else
+
+	// If race is ready to start
+	if (!startLine_wait)
+	{
+		// draw all AIs
+		for (int i = 0; i < numPlayers - 1; i++)
+		{
+			drawAI(i + 1, (int*)&CtrMain.recvBuf.data[12 * i]);
+		}
+	}
+}
+
+void RecvCharacterMesssage()
+{
+	// server will not send this message
+}
+
+void RecvStartRaceMessage()
+{
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d\n", type, size);
+#endif
+
+	startLine_wait = false;
+
+	// set controller mode to 1P, remove error message
+	char _1 = 1;
+	WriteMem(0x800987C9, &_1, sizeof(_1));
+}
+
+void (*RecvMessage[6]) () =
+{
+	RecvTrackMessage,
+	RecvLapMessage,
+	RecvStartLoadingMessage,
+	RecvPosMessage,
+	RecvCharacterMesssage,
+	RecvStartRaceMessage
+};
+
 void updateNetwork()
 {
-		unsigned char type = 0xFF;
-		unsigned char size = 0xFF;
 
 		// Get a message
 		memset(&CtrMain.recvBuf, 0xFF, sizeof(Message));
@@ -468,167 +640,8 @@ void updateNetwork()
 		type = CtrMain.recvBuf.type;
 		size = CtrMain.recvBuf.size;
 
-		// 0 means track ID, or telling you that you're the host
-		if (type == 0)
-		{
-			if (size == 2)
-			{
-				isHost = true;
-				printf("You are host, so you pick track\n");
-				printf("Press L2 for Battle Maps\n");
-				printf("Press R2 for Random Pick\n");
-				goto SendToServer;
-			}
-
-			// track, driver index, num characters, characters
-
-			// parse message
-			char trackByte = CtrMain.recvBuf.data[0];
-			myDriverIndex =  CtrMain.recvBuf.data[1];
-			numPlayers =     CtrMain.recvBuf.data[2];
-
-#if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d, -- %d %d %d", type, size, trackByte, myDriverIndex, numPlayers);
-			for (int i = 0; i < numPlayers-1; i++)
-			{
-				printf(" %d", CtrMain.recvBuf.data[3 + i]);
-			}
-			printf("\n");
-#endif
-
-			char zero = 0;
-			char ogTrackByte = 0;
-
-			// Get characterID for this player
-			// for characters 0 - 7:
-			// CharacterID[i] : 0x1608EA4 + 2 * i
-			for (int i = 0; i < numPlayers; i++)
-			{
-				characterIDs[i + 1] = CtrMain.recvBuf.data[3 + i];
-			}
-
-			// skip menu sync if you are host
-			if (isHost) goto SendToServer;
-
-			// close the lapRowSelector
-			WriteMem(0x800B59AC, &zero, sizeof(char));
-
-			// Get original track byte
-			ReadMem(0x800B46FA, &ogTrackByte, sizeof(char));
-
-			// set Text+Map address 
-			WriteMem(0x800B46FA, &trackByte, sizeof(char));
-
-			// set Video Address
-			WriteMem(0x800B59A8, &trackByte, sizeof(char));
-
-			// Set two variables to refresh the video
-			short s_One = 1;
-			WriteMem(0x800B59B8, &s_One, sizeof(short));
-			WriteMem(0x800B59BA, &s_One, sizeof(short));
-		}
-
-		// 1 means lap row, NOT DONE
-		else if (type == 1)
-		{
-			// open the lapRowSelector menu, 
-			char one = 1;
-			WriteMem(0x800B59AC, &one, sizeof(char));
-
-			// convert to one byte
-			char lapByte = CtrMain.recvBuf.data[0];
-			WriteMem(0x8008D920, &lapByte, sizeof(lapByte));
-
-#if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size, lapByte);
-#endif
-
-			// change the spawn order
-
-			// Client 0:       0 1 2 3 4 5 6 7
-			// Client 1: 1 0       2 3 4 5 6 7
-			// Client 2: 2 0 1       3 4 5 6 7
-			// Client 3: 3 0 1 2       4 5 6 7
-
-			// used to set your own spawn
-			char zero = 0;
-
-			// loop through all drivers prior to your index
-			for (char i = 1; i <= myDriverIndex; i++)
-			{
-				char spawnValue = i - 1;
-
-				WriteMem(0x80080F28 + i, &spawnValue, sizeof(char));
-			}
-
-			// set your own index
-			WriteMem(0x80080F28, &myDriverIndex, sizeof(char));
-		}
-
-		// 2 means start loading, NOT DONE
-		else if (type == 2)
-		{
-#if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d\n", type, size);
-#endif
-
-			char one = 1;
-			char two = 2;
-
-			// set menuA to 2 and menuB to 1,
-			WriteMem(0x800B59AE, &two, sizeof(char));
-			WriteMem(0x800B59B0, &one, sizeof(char));
-
-			// Reset game frame counter to zero
-			int zero = 0;
-			WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
-
-			inGame = false;
-			startLine_wait = true;
-
-			// This message will include number of players
-			// and array of characterIDs, save it for later
-			// Stop looking for messages until later
-		}
-
-		// 3 means Position Message (same in server and client)
-		else if (type == 3)
-		{
-#if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
-				*(int*)&CtrMain.recvBuf.data[0],
-				*(int*)&CtrMain.recvBuf.data[4],
-				*(int*)&CtrMain.recvBuf.data[8]);
-#endif
-
-			// This NEEDS to move somewhere else
-
-			// If race is ready to start
-			if (!startLine_wait)
-			{
-				// draw all AIs
-				for (int i = 0; i < numPlayers - 1; i++)
-				{
-					drawAI(i + 1, (int*)&CtrMain.recvBuf.data[12 * i]);
-				}
-			}
-		}
-
-		// message 4 will not come from server
-
-		// 5 means start race at traffic lights
-		else if (type == 5)
-		{
-#if TEST_DEBUG
-			printf("Recv -- Tag: %d, size: %d\n", type, size);
-#endif
-
-			startLine_wait = false;
-
-			// set controller mode to 1P, remove error message
-			char _1 = 1;
-			WriteMem(0x800987C9, &_1, sizeof(_1));
-		}
+		// execute message depending on type
+		RecvMessage[type]();
 
 	SendToServer:
 

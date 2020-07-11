@@ -153,8 +153,10 @@ void initialize()
 	RECT r;
 	GetWindowRect(console, &r); //stores the console's current dimensions
 
-	// 300 + height of bar (25)
-	MoveWindow(console, r.left, r.top, 400, 240+35, TRUE);
+	const int winW = TEST_DEBUG ? 1000 : 400;
+
+	// 300 + height of bar (35)
+	MoveWindow(console, r.left, r.top, winW, 240+35, TRUE);
 
 	WSADATA wsaData;
 	int iResult;
@@ -236,7 +238,13 @@ void RecvTrackMessage(int sender)
 	unsigned char trackID = CtrClient[sender].recvBuf.data[0];
 	characterIDs[0] =		CtrClient[sender].recvBuf.data[1];
 
-	// send to all clients, since it includes characters
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d, -- %d %d\n", type, size,
+		trackID,
+		characterIDs[0]);
+#endif
+
+	// send to all clients (host too), since it includes characters
 	for (int i = 0; i < clientCount; i++)
 	{
 		// track, driver index, num characters, characters
@@ -263,6 +271,11 @@ void RecvTrackMessage(int sender)
 
 void RecvLapMessage(int sender)
 {
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size,
+		CtrClient[sender].recvBuf.data[0]);
+#endif
+
 	// send info to all "other" players
 	for (int i = 0; i < clientCount; i++)
 	{
@@ -276,8 +289,12 @@ void RecvLapMessage(int sender)
 
 void RecvStartLoadingMessage(int sender)
 {
+#if TEST_DEBUG
+	printf("Recv -- Tag: %d, size: %d\n", type, size);
+#endif
+
 	// send to all "other" clients
-	for (int i = 1; i < clientCount; i++)
+	for (int i = 0; i < clientCount; i++)
 	{
 		// dont send to yourself
 		if (i == sender) continue;
@@ -293,10 +310,11 @@ void RecvPosMessage(int sender)
 	memcpy(&CtrClient[sender].pos[0], &CtrClient[sender].recvBuf.data[0], 12);
 
 #if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
+	printf("Recv -- Tag: %d, size: %d, -- %08X %08X %08X from %d\n", type, size,
 		*(int*)&CtrClient[sender].recvBuf.data[0],
 		*(int*)&CtrClient[sender].recvBuf.data[4],
-		*(int*)&CtrClient[sender].recvBuf.data[8]);
+		*(int*)&CtrClient[sender].recvBuf.data[8],
+		sender);
 #endif
 }
 
@@ -308,8 +326,9 @@ void RecvCharacterMesssage(int sender)
 	characterIDs[sender] = (short)CtrClient[sender].recvBuf.data[0];
 
 #if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size,
-		CtrClient[sender].recvBuf.data[0]);
+	printf("Recv -- Tag: %d, size: %d, -- %d from %d\n", type, size,
+		CtrClient[sender].recvBuf.data[0],
+		sender);
 #endif
 }
 
@@ -320,7 +339,7 @@ void RecvStartRaceMessage(int sender)
 	startLine.clientsHere[sender] = true;
 
 #if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d\n", type, size);
+	printf("Recv -- Tag: %d, size: %d, from %d\n", type, size, sender);
 #endif
 }
 
@@ -408,7 +427,8 @@ void HandleClient(int i)
 	size = CtrClient[i].recvBuf.size;
 
 	// parse message, depending on type
-	RecvMessage[type](i);
+	if (type >= 0 && type <= sizeof(RecvMessage) / sizeof(RecvMessage[0]))
+		RecvMessage[type](i);
 
 
 SendToClient:
@@ -459,7 +479,7 @@ SendToClient:
 		int i2 = *(int*)&CtrClient[i].sendBuf.data[4];
 		int i3 = *(int*)&CtrClient[i].sendBuf.data[8];
 
-		printf("Send -- Tag: %d, size: %d -- %d %d %d\n", type, size, i1, i2, i3);
+		printf("Send -- Tag: %d, size: %d, -- %08X %08X %08X\n", type, size, i1, i2, i3);
 	}
 
 	// type 4 will not come from server

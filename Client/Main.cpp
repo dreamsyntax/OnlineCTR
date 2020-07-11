@@ -25,6 +25,10 @@ int currButton = 0;
 int prevButton = 0;
 bool isHost = false;
 
+// These should be in a config struct
+short inCharSelection = 0;
+bool inTrackSelection = false;
+
 #define TEST_DEBUG 0
 
 struct Message
@@ -84,7 +88,6 @@ unsigned long long menuState;
 unsigned char numPlayers = 0;
 unsigned char myDriverIndex = 0; // will never change on server
 
-int aiNavBackup[3] = { 0,0,0 };
 uintptr_t ePSXeModule = 0;
 
 // needed for all hacks
@@ -197,34 +200,41 @@ int roll(int min, int max)
 
 void EnableAI()
 {
-	if (aiNavBackup[0] != 0)
-	{
-		// restore ASM so AI can take over
-		WriteMem(0x80015538, &aiNavBackup[0], sizeof(int));
-		WriteMem(0x80015560, &aiNavBackup[1], sizeof(int));
-		WriteMem(0x80015594, &aiNavBackup[2], sizeof(int));
+	int ai1 = 0xAE6305F0;
+	int ai2 = 0xAE6302D0;
+	int ai3 = 0xAE6305F8;
 
-		aiNavBackup[0] = 0;
-		aiNavBackup[1] = 0;
-		aiNavBackup[2] = 0;
-	}
+	int test;
+	ReadMem(0x80015538, &test, sizeof(int));
+
+	// check if AI has not been modified
+	if (test != 0)
+		return;
+
+	// restore ASM so AI can take over
+	WriteMem(0x80015538, &ai1, sizeof(int));
+	WriteMem(0x80015560, &ai2, sizeof(int));
+	WriteMem(0x80015594, &ai3, sizeof(int));
 }
 
 void DisableAI()
 {
-	if (aiNavBackup[0] == 0)
-	{
-		// Mkae backups of the asm before overwriting
-		ReadMem(0x80015538, &aiNavBackup[0], sizeof(int));
-		ReadMem(0x80015560, &aiNavBackup[1], sizeof(int));
-		ReadMem(0x80015594, &aiNavBackup[2], sizeof(int));
+	int ai1 = 0xAE6305F0;
+	int ai2 = 0xAE6302D0;
+	int ai3 = 0xAE6305F8;
 
-		// Stop AI system from writing position data
-		int zero = 0;
-		WriteMem(0x80015538, &zero, sizeof(int));
-		WriteMem(0x80015560, &zero, sizeof(int));
-		WriteMem(0x80015594, &zero, sizeof(int));
-	}
+	int test;
+	ReadMem(0x80015538, &test, sizeof(int));
+
+	// check if AI has been modified
+	if (test != ai1)
+		return;
+
+	// Stop AI system from writing position data
+	int zero = 0;
+	WriteMem(0x80015538, &zero, sizeof(int));
+	WriteMem(0x80015560, &zero, sizeof(int));
+	WriteMem(0x80015594, &zero, sizeof(int));
 }
 
 void
@@ -260,8 +270,10 @@ void initialize()
 	RECT r;
 	GetWindowRect(console, &r); //stores the console's current dimensions
 
-	// 300 + height of bar (25)
-	MoveWindow(console, r.left, r.top, 400, 240+35, TRUE);
+	const int winW = TEST_DEBUG ? 1000 : 400;
+
+	// 300 + height of bar (35)
+	MoveWindow(console, r.left, r.top, winW, 240+35, TRUE);
 
 	// Initialize random number generator
 	srand((unsigned int)time(NULL));
@@ -377,28 +389,6 @@ void initialize()
 	printf("Press L2 for Oxide\n");
 	printf("Press R2 for Random\n");
 	printf("\n");
-
-	// Unlock all cars and tracks immediately
-	unsigned long long value = 0xFFFFFFFFFFFFFFFF;
-	WriteMem(0x8008E6EC, &value, sizeof(value));
-
-	// Ja ra, return asm, 
-	// disable weapons for players and enemies
-	int jaRa = 0x3e00008;
-	WriteMem(0x8006540C, &jaRa, sizeof(int));
-
-	// Patch the first if-statement of FUN_8003282c
-	// Allow 4 characters to load in high LOD
-	int zero = 0;
-	WriteMem(0x80032840, &zero, sizeof(int));
-
-	short HighMpk = 0x00F2;
-
-	// Only first 3 characters are high lod
-	// Leave 4th as low, or everything breaks
-	WriteMem(0x80032888, &HighMpk, sizeof(short));
-	WriteMem(0x800328A4, &HighMpk, sizeof(short));
-	WriteMem(0x800328C0, &HighMpk, sizeof(short));
 }
 
 void disableAI_RenameThis(int aiNumber)
@@ -554,10 +544,16 @@ void RecvStartLoadingMessage()
 void RecvPosMessage()
 {
 #if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d, -- %d %d %d\n", type, size,
-		*(int*)&CtrMain.recvBuf.data[0],
-		*(int*)&CtrMain.recvBuf.data[4],
-		*(int*)&CtrMain.recvBuf.data[8]);
+	printf("Recv -- Tag: %d, size: %d, -- ", type, size);
+	
+	for (int i = 0; i < numPlayers - 1; i++)
+	{
+		printf("%08X %08X %08X ",
+			*(int*)&CtrMain.recvBuf.data[12 * i + 0],
+			*(int*)&CtrMain.recvBuf.data[12 * i + 4],
+			*(int*)&CtrMain.recvBuf.data[12 * i + 8]);
+	}
+	printf("\n");
 #endif
 
 	// This NEEDS to move somewhere else
@@ -603,90 +599,90 @@ void (*RecvMessage[6]) () =
 
 void updateNetwork()
 {
-
-		// Get a message
-		memset(&CtrMain.recvBuf, 0xFF, sizeof(Message));
-		receivedByteCount = recv(CtrMain.socket, (char*)&CtrMain.recvBuf, sizeof(Message), 0);
-
-		if (receivedByteCount == -1)
+	// Get a message
+	memset(&CtrMain.recvBuf, 0xFF, sizeof(Message));
+	receivedByteCount = recv(CtrMain.socket, (char*)&CtrMain.recvBuf, sizeof(Message), 0);
+	
+	if (receivedByteCount == -1)
+		goto SendToServer;
+	//printf("Error %d\n", WSAGetLastError());
+	
+	if (receivedByteCount == 0)
+	{
+		printf("Disconnected\n");
+		system("pause");
+		exit(0);
+	}
+	
+	if (receivedByteCount < CtrMain.recvBuf.size)
+	{
+		//printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
+		//	recvBuf.type, recvBuf.size, receivedByteCount);
+	
+		goto SendToServer;
+	}
+	
+	// We can confirm we have a valid message
+	
+	// dont parse same message twice
+	if (CtrMain.recvBuf.size == CtrMain.recvBufPrev.size)
+		if (memcmp(&CtrMain.recvBuf, &CtrMain.recvBufPrev, CtrMain.recvBuf.size) == 0)
 			goto SendToServer;
-		//printf("Error %d\n", WSAGetLastError());
-
-		if (receivedByteCount == 0)
-		{
-			printf("Disconnected\n");
-			system("pause");
-			exit(0);
-		}
-
-		if (receivedByteCount < CtrMain.recvBuf.size)
-		{
-			//printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
-			//	recvBuf.type, recvBuf.size, receivedByteCount);
-
-			goto SendToServer;
-		}
-
-		// We can confirm we have a valid message
-
-		// dont parse same message twice
-		if (CtrMain.recvBuf.size == CtrMain.recvBufPrev.size)
-			if (memcmp(&CtrMain.recvBuf, &CtrMain.recvBufPrev, CtrMain.recvBuf.size) == 0)
-				goto SendToServer;
-
-		// make a backup
-		memcpy(&CtrMain.recvBufPrev, &CtrMain.recvBuf, sizeof(Message));
-
-		type = CtrMain.recvBuf.type;
-		size = CtrMain.recvBuf.size;
-
-		// execute message depending on type
+	
+	// make a backup
+	memcpy(&CtrMain.recvBufPrev, &CtrMain.recvBuf, sizeof(Message));
+	
+	type = CtrMain.recvBuf.type;
+	size = CtrMain.recvBuf.size;
+	
+	// execute message depending on type
+	if(type >= 0 && type <= sizeof(RecvMessage)/sizeof(RecvMessage[0]))
 		RecvMessage[type]();
-
-	SendToServer:
-
-		if (CtrMain.sendBuf.type == 0xFF)
+	
+SendToServer:
+	
+	if (CtrMain.sendBuf.type == 0xFF)
+		return;
+	
+	// dont send the same message twice, 
+	// or
+	// To do: if server has not gotten prev message
+	if (CtrMain.sendBuf.size == CtrMain.sendBufPrev.size)
+		if (memcmp(&CtrMain.sendBuf, &CtrMain.sendBufPrev, CtrMain.sendBuf.size) == 0)
 			return;
-
-		// dont send the same message twice, 
-		// or
-		// To do: if server has not gotten prev message
-		if (CtrMain.sendBuf.size == CtrMain.sendBufPrev.size)
-			if (memcmp(&CtrMain.sendBuf, &CtrMain.sendBufPrev, CtrMain.sendBuf.size) == 0)
-				return;
-
-		// send a message to the client
-		send(CtrMain.socket, (char*)&CtrMain.sendBuf, sizeof(Message), 0);
-
-		// make a backup
-		memcpy(&CtrMain.sendBufPrev, &CtrMain.sendBuf, sizeof(Message));
-
+	
+	// send a message to the client
+	send(CtrMain.socket, (char*)&CtrMain.sendBuf, sizeof(Message), 0);
+	
+	// make a backup
+	memcpy(&CtrMain.sendBufPrev, &CtrMain.sendBuf, sizeof(Message));
+	
 #if TEST_DEBUG
 
-		type = CtrMain.sendBuf.type;
-		size = CtrMain.sendBuf.size;
-
-		if (type == 3)
-		{
-			int i1 = *(int*)&CtrMain.sendBuf.data[0];
-			int i2 = *(int*)&CtrMain.sendBuf.data[4];
-			int i3 = *(int*)&CtrMain.sendBuf.data[8];
-
-			printf("Send -- Tag: %d, size: %d -- %d %d %d\n", type, size, i1, i2, i3);
-		}
-
-		if (type == 4)
-		{
-			// parse message
-			char c1 = CtrMain.sendBuf.data[0];
-
-			printf("Send -- Tag: %d, size: %d, -- %d\n", type, size, c1);
-		}
-
-		if (type == 5)
-		{
-			printf("Send -- Tag: %d, size: %d\n", type, size);
-		}
+	type = CtrMain.sendBuf.type;
+	size = CtrMain.sendBuf.size;
+	
+	if (type == 3)
+	{
+		int i1 = *(int*)&CtrMain.sendBuf.data[0];
+		int i2 = *(int*)&CtrMain.sendBuf.data[4];
+		int i3 = *(int*)&CtrMain.sendBuf.data[8];
+	
+		printf("Send -- Tag: %d, size: %d, -- %08X %08X %08X \n", type, size, i1, i2, i3);
+	}
+	
+	if (type == 4)
+	{
+		// parse message
+		char c1 = CtrMain.sendBuf.data[0];
+	
+		printf("Send -- Tag: %d, size: %d, -- %d\n", type, size, c1);
+	}
+	
+	if (type == 5)
+	{
+		printf("Send -- Tag: %d, size: %d\n", type, size);
+	}
 #endif
 }
 
@@ -809,28 +805,158 @@ void SendCharacterID()
 	CtrMain.sendBuf.data[0] = (char)characterIDs[0];
 }
 
+void HandleInjectionASM()
+{
+	// test to see if someone loaded a save state
+
+	// If you're ingame, you probably saved a state with injection
+	if (inGame)
+		return;
+
+	// If you're not ingame, your state might not have injection
+	short TestHighMpk;
+	short HighMpk = 0x00F2;
+	ReadMem(0x80032888, &TestHighMpk, sizeof(short));
+
+	// If you already have the injection, you're good to go
+	if (TestHighMpk == HighMpk)
+		return;
+
+	// Unlock all cars and tracks immediately
+	unsigned long long value = 0xFFFFFFFFFFFFFFFF;
+	WriteMem(0x8008E6EC, &value, sizeof(value));
+
+	// Ja ra, return asm, 
+	// disable weapons for players and enemies
+	int jaRa = 0x3e00008;
+	WriteMem(0x8006540C, &jaRa, sizeof(int));
+
+	// Patch the first if-statement of FUN_8003282c
+	// Allow 4 characters to load in high LOD
+	int zero = 0;
+	WriteMem(0x80032840, &zero, sizeof(int));
+
+	// Only first 3 characters are high lod
+	// Leave 4th as low, or everything breaks
+	WriteMem(0x80032888, &HighMpk, sizeof(short));
+	WriteMem(0x800328A4, &HighMpk, sizeof(short));
+	WriteMem(0x800328C0, &HighMpk, sizeof(short));
+}
+
+void HandleCharacterSelection()
+{
+	ReadMem(0x8008D908, &inCharSelection, sizeof(inCharSelection));
+
+	// if you are not in character selection menu
+	if (inCharSelection != 18100)
+		return;
+
+	char penta = 0xD;
+	char oxide = 0xF;
+
+	// If you character ID is 0xF, then
+	// send cursor to penta's icon buffer.
+	// By default, it goes to Crash
+	WriteMem(0x800b50d2, &penta, 1);
+
+	// Check if Penta slot is set to penta icon or oxide icon
+	char currID;
+	ReadMem(0x800B4F24, &currID, 1);
+
+	// Handle curr and prev button
+	int L2 = 0x100;
+	int R2 = 0x200;
+	prevButton = currButton;
+	ReadMem(0x8008d974, &currButton, 4);
+
+	// Check for tapping L2 or R2
+	bool tapL2 = !(prevButton & L2) && (currButton & L2);
+	bool tapR2 = !(prevButton & R2) && (currButton & R2);
+
+	// Find every place where character ID is stored
+	char a;
+	char b;
+	char c;
+	char d;
+	ReadMem(0x80086E84, &a, sizeof(char));
+	ReadMem(0x800B59F0, &b, sizeof(char));
+	ReadMem(0x800B59F8, &c, sizeof(char));
+	ReadMem(0x801FFEA8, &d, sizeof(char));
+
+	// Find if any of them are oxide
+	char oxideAnywhere = (a == 15 || b == 15 || c == 15 || d == 15);
+
+	// hide screen
+	char _10 = oxideAnywhere * 0x10;
+	WriteMem(0x800B4D45, &_10, 1);
+
+	// change icon
+	if (tapL2)
+	{
+		tapL2 = false;
+		WriteMem(0x800B4F24, (currID == penta) ? &oxide : &penta, 1);
+	}
+
+
+	// Choose Random Track if you can't decide
+	if (tapR2)
+	{
+		// Get random kart
+		char kartByte = (char)roll(0, 0xF);
+		characterIDs[0] = kartByte;
+		WriteMem(0x80086E84, &kartByte, sizeof(char));
+	}
+}
+
+void HandleTrackSelection()
+{
+	// Check to see if you are in the track selection menu
+	ReadMem(0x8008D88C, &inTrackSelection, sizeof(inTrackSelection));
+
+	// if you're not in the track selection menu
+	if (!inTrackSelection)
+		return;
+
+	// Disable AIs so that humans can be injected
+	DisableAI();
+
+	// Get characterID for this player
+	ReadMem(0x80086E84, &characterIDs[0], sizeof(short));
+
+	// wait for all players before continuing
+	if (isHost)
+	{
+		// copy host menu state to clients
+		GetHostMenuState();
+	}
+
+	else
+	{
+		// tell the server who you picked
+		SendCharacterID();
+	}
+
+	//if (trackSel_wait)
+	if (0)
+	{
+		// set controller mode to 0P mode, trigger error message
+		char _0 = 0;
+		WriteMem(0x800987C9, &_0, sizeof(_0));
+
+		// change the error message
+		WriteMem(0x800BC684, (char*)"waiting for players...", 23);
+	}
+
+	else
+	{
+		// set controller mode to 1P mode, remove error message
+		char _1 = 1;
+		WriteMem(0x800987C9, &_1, sizeof(_1));
+	}
+}
+
 int main(int argc, char** argv)
 {
-	/*union
-	{
-		short x[3];
-		unsigned char y[6];
-	} x;
-
-	// -3005, 677, -4693
-	// 67 244 165 2 171 237
-
-	x.x[0] = -3005;
-	x.x[1] = 677;
-	x.x[2] = -4693;
-
-	printf("%hu, %hu, %hu\n", x.x[0], x.x[1], x.x[2]);
-	for(int i = 0; i < 6; i++)printf("%d ", x.y[i]);
-
-	printf("\n");*/
-
-	//=======================================================================
-
 	initialize();
 
 	clock_t start = clock();
@@ -855,113 +981,15 @@ int main(int argc, char** argv)
 		// handle all message reading and writing
 		updateNetwork();
 
-		short inCharSelection = 0;
-		ReadMem(0x8008D908, &inCharSelection, sizeof(inCharSelection));
+		// disable weapons, load high LODs
+		HandleInjectionASM();
 
-		// if you are in character selection menu
-		if (inCharSelection == 18100)
-		{
-			char penta = 0xD;
-			char oxide = 0xF;
+		// L2 or oxide, R2 for random
+		HandleCharacterSelection();
 
-			// If you character ID is 0xF, then
-			// send cursor to penta's icon buffer.
-			// By default, it goes to Crash
-			WriteMem(0x800b50d2, &penta, 1);
-
-			char currID;
-			ReadMem(0x800B4F24, &currID, 1);
-
-
-			int L2 = 0x100;
-			int R2 = 0x200;
-			prevButton = currButton;
-			ReadMem(0x8008d974, &currButton, 4);
-
-			bool tapL2 = !(prevButton & L2) && (currButton & L2);
-			bool tapR2 = !(prevButton & R2) && (currButton & R2);
-
-			char a;
-			char b;
-			char c;
-			char d;
-			ReadMem(0x80086E84, &a, sizeof(char));
-			ReadMem(0x800B59F0, &b, sizeof(char));
-			ReadMem(0x800B59F8, &c, sizeof(char));
-			ReadMem(0x801FFEA8, &d, sizeof(char));
-
-			char oxideAnywhere = (a == 15 || b == 15 || c == 15 || d == 15);
-
-			// hide screen
-			char _10 = oxideAnywhere * 0x10;
-			WriteMem(0x800B4D45, &_10, 1);
-
-			// change icon
-			if (tapL2)
-			{
-				tapL2 = false;
-				WriteMem(0x800B4F24, (currID == penta) ? &oxide : &penta, 1);
-			}
-
-
-			// Choose Random Track if you can't decide
-			if (tapR2)
-			{
-				// Get random kart
-				char kartByte = (char)roll(0, 0xF);
-				characterIDs[0] = kartByte;
-				WriteMem(0x80086E84, &kartByte, sizeof(char));
-			}
-
-			continue;
-		}
-
-		// Check to see if you are in the track selection menu
-		bool inTrackSelection = false;
-		ReadMem(0x8008D88C, &inTrackSelection, sizeof(inTrackSelection));
-
-		// if you're in the track selection menu
-		if (inTrackSelection)
-		{
-			// Disable AIs so that humans can be injected
-			DisableAI();
-
-			// Get characterID for this player
-			ReadMem(0x80086E84, &characterIDs[0], sizeof(short));
-
-			// wait for all players before continuing
-			if (isHost)
-			{
-				// copy host menu state to clients
-				GetHostMenuState();
-
-				//if (trackSel_wait)
-				if(0)
-				{
-					// set controller mode to 0P mode, trigger error message
-					char _0 = 0;
-					WriteMem(0x800987C9, &_0, sizeof(_0));
-
-					// change the error message
-					WriteMem(0x800BC684, (char*)"waiting for players...", 23);
-				}
-
-				else
-				{
-					// set controller mode to 1P mode, remove error message
-					char _1 = 1;
-					WriteMem(0x800987C9, &_1, sizeof(_1));
-				}
-			}
-
-			else
-			{
-				SendCharacterID();
-			}
-
-			// Restart the loop, don't proceed
-			continue;
-		}
+		// send messages to server, whether host or guest,
+		// this does not handle recv or injecting track values
+		HandleTrackSelection();
 
 		// GameState
 		// 2 = loading screen
@@ -978,8 +1006,10 @@ int main(int argc, char** argv)
 			// to make sure the right characters are loaded
 			SendOnlinePlayersToRAM();
 
-			// restart the loop
-			continue;
+			// dont "continue" to reset the iteration,
+			// because if you load a state from a race,
+			// you need to check "if ingame, if not in race,
+			// then tell server not in race"
 		}
 
 

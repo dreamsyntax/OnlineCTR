@@ -88,94 +88,6 @@ unsigned long long menuState;
 unsigned char numPlayers = 0;
 unsigned char myDriverIndex = 0; // will never change on server
 
-uintptr_t ePSXeModule = 0;
-
-// needed for all hacks
-DWORD GetProcId(const wchar_t* processName, DWORD desiredIndex)
-{
-	// create snapshot of PROCESS
-	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-
-	// check for valid
-	if (hSnap != INVALID_HANDLE_VALUE)
-	{
-		// process entry
-		PROCESSENTRY32 procEntry;
-		procEntry.dwSize = sizeof(procEntry);
-
-		// start looping through processes
-		if (Process32First(hSnap, &procEntry))
-		{
-			int processIndex = 0;
-
-			// check if this is the right process
-			do
-			{
-				// if the name of this process is the name we are searching
-				if (!_wcsicmp(procEntry.szExeFile, processName))
-				{
-					if (processIndex == desiredIndex)
-					{
-						// return this process ID
-						return procEntry.th32ProcessID;
-						break;
-					}
-
-					processIndex++;
-				}
-
-				// check the next one
-			} while (Process32Next(hSnap, &procEntry));
-		}
-	}
-
-	// if the procID is not found
-	printf("Failed to inject emulator\n");
-	system("pause");
-	exit(0);
-
-	// close the snap and return 0
-	CloseHandle(hSnap);
-	return 0;
-}
-
-// Needed for all ePSXe hacks, used for DLLs in other hacks
-uintptr_t GetModuleBaseAddress(DWORD procId, const wchar_t* modName)
-{
-	// create snapshot of MODULE and MODULE32
-	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, procId);
-
-	// check for valid
-	if (hSnap != INVALID_HANDLE_VALUE)
-	{
-		// module entry
-		MODULEENTRY32 modEntry;
-		modEntry.dwSize = sizeof(modEntry);
-
-		// start looping through modules
-		if (Module32First(hSnap, &modEntry))
-		{
-			// check if this is the right module
-			do
-			{
-				// if the name of this module is the name we are searching
-				if (!_wcsicmp(modEntry.szModule, modName))
-				{
-					// return this module base address
-					return (uintptr_t)modEntry.modBaseAddr;
-					break;
-				}
-
-				// check the next one
-			} while (Module32Next(hSnap, &modEntry));
-		}
-	}
-
-	// close the snap and return 0
-	CloseHandle(hSnap);
-	return 0;
-}
-
 void WriteMem(unsigned int psxAddr, void* pcAddr, int size)
 {
 	WriteProcessMemory(handle, (PBYTE*)(baseAddress + psxAddr), pcAddr, size, 0);
@@ -294,9 +206,6 @@ void initialize()
 	printf("\n");
 	printf("Searching for CTR 94426 in emulator ram...\n");
 
-	// get the base address, relative to the module
-	ePSXeModule = GetModuleBaseAddress(procID, L"ePSXe.exe");
-
 	// open the process with procID, and store it in the 'handle'
 	handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, procID);
 
@@ -324,7 +233,7 @@ void initialize()
 	std::vector<UINT_PTR> AddressHolder = Hyperscan::HYPERSCAN_SCANNER::Scan(procID, ctrData, 12, Hyperscan::HyperscanAllignment4Bytes,
 		Hyperscan::HyperscanTypeExact);
 
-	// Copy the result, need to add 1 for some reason
+	// take the first (should be only) result
 	baseAddress = AddressHolder[0];
 
 	// Remove 0x8003C62C address of PSX memory,

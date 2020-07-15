@@ -78,13 +78,8 @@ bool startLine_wait = true;
 bool trackSel_wait = true;
 
 unsigned int AddrP1 = 0;
-unsigned char gameStateCurr; // 0x161A871
-unsigned char weaponPrev; // relative to posX
-unsigned char weaponCurr; // relative to posX
-unsigned char trackID; // 0x163671A
-unsigned char trackVideoID; // 0x16379C8
-unsigned char LevelOfDetail; // 0xB0F85C
-unsigned long long menuState;
+unsigned char gameStateCurr;
+unsigned char trackID;
 unsigned char numPlayers = 0;
 unsigned char myDriverIndex = 0; // will never change on server
 

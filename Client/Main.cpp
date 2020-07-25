@@ -743,6 +743,9 @@ void HandleInjectionASM()
 	WriteMem(0x80032888, &HighMpk, sizeof(short));
 	WriteMem(0x800328A4, &HighMpk, sizeof(short));
 	WriteMem(0x800328C0, &HighMpk, sizeof(short));
+
+	// Disable collision between players
+	WriteMem(0x80042368, &zero, sizeof(int));
 }
 
 void HandleCharacterSelection()

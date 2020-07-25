@@ -47,6 +47,9 @@ void acceptTCP(SOCKET& origSock)
 
 #define TEST_DEBUG 0
 
+// 3 ints, 3 shorts
+const int Type3_Size = 18;
+
 struct Message
 {
 	// [server -> client]
@@ -71,7 +74,18 @@ struct Message
 
 	unsigned char type;
 	unsigned char size;
-	char data[2 + 12 * 4];
+
+	// max data size
+	// 3x
+		// int posX		-- 4
+		// int posY		-- 8
+		// int posZ		-- 12
+		// short rotX	-- 14
+		// short rotY	-- 16
+		// short rotZ	-- 18
+
+	// Server and client MUST match
+	char data[18 * 4]; // should be * 3, but then 4P breaks
 };
 
 struct SocketCtr
@@ -81,7 +95,12 @@ struct SocketCtr
 	Message sendBufPrev;
 	Message recvBuf;
 	Message recvBufPrev;
+
+	// pos and rot MUST be together
 	int pos[3];
+	short rot[3];
+
+	// unused, but has potential
 	bool needCompress;
 };
 
@@ -307,13 +326,16 @@ void RecvStartLoadingMessage(int sender)
 void RecvPosMessage(int sender)
 {
 	// store a backup
-	memcpy(&CtrClient[sender].pos[0], &CtrClient[sender].recvBuf.data[0], 12);
+	memcpy(&CtrClient[sender].pos[0], &CtrClient[sender].recvBuf.data[0], Type3_Size);
 
 #if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d, -- %08X %08X %08X from %d\n", type, size,
+	printf("Recv -- Tag: %d, size: %d, -- %08X %08X %08X %04X %04X %04X from %d\n", type, size,
 		*(int*)&CtrClient[sender].recvBuf.data[0],
 		*(int*)&CtrClient[sender].recvBuf.data[4],
 		*(int*)&CtrClient[sender].recvBuf.data[8],
+		*(short*)&CtrClient[sender].recvBuf.data[12],
+		*(short*)&CtrClient[sender].recvBuf.data[14],
+		*(short*)&CtrClient[sender].recvBuf.data[16],
 		sender);
 #endif
 }
@@ -504,7 +526,7 @@ void preparePositionMessage()
 		sendBuf = &CtrClient[i].sendBuf;
 
 		sendBuf->type = 3;
-		sendBuf->size = 2 + 12 * clientCount;
+		sendBuf->size = 2 + Type3_Size * clientCount;
 
 		int k = 0;
 
@@ -513,7 +535,7 @@ void preparePositionMessage()
 			if (i == j)
 				continue;
 
-			memcpy(&sendBuf->data[12 * k], CtrClient[j].pos, 12);
+			memcpy(&sendBuf->data[Type3_Size * k], &CtrClient[j].pos[0], Type3_Size);
 
 			k++;
 		}

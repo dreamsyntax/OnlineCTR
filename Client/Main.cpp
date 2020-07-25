@@ -31,6 +31,9 @@ bool inTrackSelection = false;
 
 #define TEST_DEBUG 0
 
+// 3 ints, 3 shorts
+const int Type3_Size = 18;
+
 struct Message
 {
 	// [server -> client]
@@ -55,7 +58,18 @@ struct Message
 
 	unsigned char type;
 	unsigned char size;
-	char data[2 + 12 * 4];
+
+	// max data size
+	// 3x
+		// int posX		-- 4
+		// int posY		-- 8
+		// int posZ		-- 12
+		// short rotX	-- 14
+		// short rotY	-- 16
+		// short rotZ	-- 18
+
+	// Server and client MUST match
+	char data[18 * 4]; // should be * 3, but then 4P breaks
 };
 
 struct SocketCtr
@@ -65,7 +79,12 @@ struct SocketCtr
 	Message sendBufPrev;
 	Message recvBuf;
 	Message recvBufPrev;
+
+	// pos and rot MUST be together
 	int pos[3];
+	short rot[3];
+
+	// unused, but has potential
 	bool needCompress;
 };
 
@@ -105,43 +124,17 @@ int roll(int min, int max)
 	return that;
 }
 
-void EnableAI()
-{
-	int ai1 = 0xAE6305F0;
-	int ai2 = 0xAE6302D0;
-	int ai3 = 0xAE6305F8;
-
-	int test;
-	ReadMem(0x80015538, &test, sizeof(int));
-
-	// check if AI has not been modified
-	if (test != 0)
-		return;
-
-	// restore ASM so AI can take over
-	WriteMem(0x80015538, &ai1, sizeof(int));
-	WriteMem(0x80015560, &ai2, sizeof(int));
-	WriteMem(0x80015594, &ai3, sizeof(int));
-}
-
 void DisableAI()
 {
-	int ai1 = 0xAE6305F0;
-	int ai2 = 0xAE6302D0;
-	int ai3 = 0xAE6305F8;
-
-	int test;
-	ReadMem(0x80015538, &test, sizeof(int));
-
-	// check if AI has been modified
-	if (test != ai1)
-		return;
-
 	// Stop AI system from writing position data
 	int zero = 0;
 	WriteMem(0x80015538, &zero, sizeof(int));
 	WriteMem(0x80015560, &zero, sizeof(int));
 	WriteMem(0x80015594, &zero, sizeof(int));
+
+	char data[0x18];
+	memset(data, 0, 0x18);
+	WriteMem(0x80016470, data, 0x18);
 }
 
 void
@@ -307,18 +300,20 @@ void disableAI_RenameThis(int aiNumber)
 	WriteMem(AddrAI + 0x604, &_30, sizeof(int));
 }
 
-void drawAI(int aiNumber, int* netPos)
+void drawAI(int aiNumber, char* data)
 {
 	unsigned int AddrAI = AddrP1;
 	AddrAI -= 0x670 * aiNumber;
+	
+	// position
+	WriteMem(AddrAI + 0x5f0, &data[0], sizeof(int));
+	WriteMem(AddrAI + 0x5f4, &data[4], sizeof(int));
+	WriteMem(AddrAI + 0x5f8, &data[8], sizeof(int));
 
-	/*WriteMem(AddrAI + 0x2d4, &netPos[0], sizeof(int));
-	WriteMem(AddrAI + 0x2d8, &netPos[1], sizeof(int));
-	WriteMem(AddrAI + 0x2dC, &netPos[2], sizeof(int));*/
-
-	WriteMem(AddrAI + 0x5f0, &netPos[0], sizeof(int));
-	WriteMem(AddrAI + 0x5f4, &netPos[1], sizeof(int));
-	WriteMem(AddrAI + 0x5f8, &netPos[2], sizeof(int));
+	// rotation
+	WriteMem(AddrAI + 0x2ec, &data[12], sizeof(short));
+	WriteMem(AddrAI + 0x2ee, &data[14], sizeof(short));
+	WriteMem(AddrAI + 0x2f0, &data[16], sizeof(short));
 }
 
 // globals
@@ -452,10 +447,13 @@ void RecvPosMessage()
 	
 	for (int i = 0; i < numPlayers - 1; i++)
 	{
-		printf("%08X %08X %08X ",
-			*(int*)&CtrMain.recvBuf.data[12 * i + 0],
-			*(int*)&CtrMain.recvBuf.data[12 * i + 4],
-			*(int*)&CtrMain.recvBuf.data[12 * i + 8]);
+		printf("%08X %08X %08X %04X %04X %04X",
+			*(int*)&CtrMain.recvBuf.data[Type3_Size * i + 0],
+			*(int*)&CtrMain.recvBuf.data[Type3_Size * i + 4],
+			*(int*)&CtrMain.recvBuf.data[Type3_Size * i + 8]
+			*(short*)&CtrMain.recvBuf.data[Type3_Size * i + 12],
+			*(short*)&CtrMain.recvBuf.data[Type3_Size * i + 14],
+			*(short*)&CtrMain.recvBuf.data[Type3_Size * i + 16], );
 	}
 	printf("\n");
 #endif
@@ -468,7 +466,7 @@ void RecvPosMessage()
 		// draw all AIs
 		for (int i = 0; i < numPlayers - 1; i++)
 		{
-			drawAI(i + 1, (int*)&CtrMain.recvBuf.data[12 * i]);
+			drawAI(i + 1, (char*)&CtrMain.recvBuf.data[Type3_Size * i]);
 		}
 	}
 }
@@ -995,7 +993,10 @@ int main(int argc, char** argv)
 					// All players have 12-byte positions (4x3). 
 					// Changing those coordinates will not move
 					// the players. 
-					ReadMem(AddrP1 + 0x2D4, (int*)&CtrMain.sendBuf.data[0], sizeof(int) * 3);
+					ReadMem(AddrP1 + 0x2D4, &CtrMain.sendBuf.data[0], sizeof(int) * 3);
+
+					// Get Player 1 rotation
+					ReadMem(AddrP1 + 0x2ec, &CtrMain.sendBuf.data[12], sizeof(short) * 3);
 				}
 
 				// if you finished or left the race

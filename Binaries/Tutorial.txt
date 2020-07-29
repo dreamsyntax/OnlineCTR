@@ -1,0 +1,79 @@
+If you get an error for missing VCRUNTIME 140_1 dll
+	Go to this link:            https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads
+	Download and run:    vc_redist.x64.exe
+
+Host a NodeServer
+	A node server can be hosted by a player or a non-player,
+	it handles all the networking that makes the game work.
+	Whoever runs NodeServer.exe must have port 1234 open on their router
+	The computer hosting the NodeServer can be the same computer that 
+	hosts the game, or it could be a different computer
+	
+Connect to NodeServer
+	Open Client.exe, and follow the directions on-screen, it explains how
+	to connect and play. Client.exe is smart enough to work with any
+	emulator. It is confirmed to work with ePSXe 2.0.5 and Bizhawk, it is
+	confirmed not to work with Rpcs3, it will probably work in any other emu
+
+Host a Game
+	The host of any game is the first client to connect to the NodeServer.
+	Hosting a game means you are the one that chooses the track,
+	aside from that, you are no different than any other client. The Client.exe
+	window will tell you how to randomly choose a track, and how to use
+	use Battle maps, which is only for testing new features
+
+Join a Game
+	All additional clients who join after the host, are guests. The Client.exe
+	window will tell you how to randomly choose a character, or choose Oxide
+
+Avoid bugs:
+	-If you are a game-host, you must wait for everyone to be in track selection,
+		then change the track at least once, when everyone's there
+	-If you are a game-guest, do not press any buttons while in track selection.
+	-If one person disconnects, everyone needs to disconnect,
+		NodeServer and all Clients need to close and reopen
+	-Do not ignore the step in Client.exe where you save state and load state
+		it is needed to flush ASM cache in non-interpreter emulators,
+		skipping this step is the most common cause of bugs
+
+Start the race
+	The host chooses the race, and number of laps, then starts the race.
+	All guests should automatically mimic the host, without pressing buttons.
+	If guests do not start loading a level when the host does, it means the 
+	guests were not properly connected
+
+Additional races
+	Choose "Change Character" or "Change Level", then wait at the track selection
+	until the host and all clients are in the track selection, and then the host starts the
+	next race. You can choose "Change Character" or "Change Level" after you finish
+	a race, or you can pause the game and leave without finishing, the choice is yours
+
+Most commonly asked questions
+
+Q: When will there be 8P support?
+A: 8P already works, but it is disabled in the consumer-release because the lag 
+	is horrible; that can be fixed with implementing UDP networking. Also,
+	it's restricted to non-secret characers, that can be fixed with more ASM
+	injection
+
+Q: When will weapons work?
+A: When we figure out how to make AIs spawn weapons programmatically
+
+Q: Why does Nitro Court and Adventure Arena fail to work
+A: Both fail due to a lack of AI navigation points, Adventure Arena requires
+	additional work to spawn the player on the track, and not in the void
+
+Q: When will OnlineCTR work on other platforms?
+A1: Linux is on hold until we find how to dynamically search emulators for CTR memory
+A2: PSP is on hold until we find how to flush ASM cache due to a non-interpreter emulator
+A3: PS3 doesn't have the ASM cache problem, but I dont have money to buy a PS3
+A4: All other platforms are on hold, cause I dont have money to buy more consoles
+
+Q: When will this server/client stuff become more user-friendly
+A: I want to build a server farm, with match-making abilities, so that nobody needs to 
+	worry about hosting NodeServers, and so that everyone can connect to the
+	same place without worrying about IPs, but I dont have money to buy a server
+	farm, and also, the server software for that is currently not done
+
+Q: How can I donate to support the project?
+A: Donate to my paypal email, nprocopi2017@gmail.com

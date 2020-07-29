@@ -30,8 +30,8 @@ Avoid bugs:
 	-If you are a game-host, you must wait for everyone to be in track selection,
 		then change the track at least once, when everyone's there
 	-If you are a game-guest, do not press any buttons while in track selection.
-	-If one person disconnects, everyone needs to disconnect,
-		NodeServer and all Clients need to close and reopen
+	-If one person disconnects, everyone disconnects, NodeServer can reset
+		itself, and run infinitely, while Clients need to close and reopen
 	-Do not ignore the step in Client.exe where you save state and load state
 		it is needed to flush ASM cache in non-interpreter emulators,
 		skipping this step is the most common cause of bugs
@@ -39,8 +39,10 @@ Avoid bugs:
 Start the race
 	The host chooses the race, and number of laps, then starts the race.
 	All guests should automatically mimic the host, without pressing buttons.
-	If guests do not start loading a level when the host does, it means the 
-	guests were not properly connected
+	If guests do not start loading a level when the host does, it means either:
+		- The NodeServer does not have port forwarding
+		- The game host did not connect properly
+		- The game guests did not connect properly
 
 Additional races
 	Choose "Change Character" or "Change Level", then wait at the track selection

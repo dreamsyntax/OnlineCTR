@@ -505,9 +505,50 @@ void updateNetwork()
 	memset(&CtrMain.recvBuf, 0xFF, sizeof(Message));
 	receivedByteCount = recv(CtrMain.socket, (char*)&CtrMain.recvBuf, sizeof(Message), 0);
 	
+	// check for errors
 	if (receivedByteCount == -1)
+	{
+		int err = WSAGetLastError();
+
+//#if TEST_DEBUG
+		printf("Error %d\n", err);
+//#endif
+
+		// if someone disconnected
+		if (err == WSAECONNRESET)
+		{
+			system("cls");
+			printf("Connection Lost\n\n");
+			printf("1. Close Client.exe\n");
+			printf("2. Load your save state\n");
+			printf("3. Open Client.exe and reconnect\n");
+
+			while (true)
+			{
+				// set controller mode to 0P mode, trigger error message
+				char _0 = 0;
+				WriteMem(0x800987C9, &_0, sizeof(_0));
+
+				// change the error message
+				WriteMem(0x800BC684, (char*)"Connection Lost", 23);
+
+				Sleep(1);
+			}
+		}
+
+		if (err == WSAENOTCONN)
+		{
+			system("cls");
+			printf("Failed to connect to server\n\n");
+			printf("Close Client.exe and reopen, try again\n");
+
+			printf("\n");
+			system("pause");
+			exit(0);
+		}
+
 		goto SendToServer;
-	//printf("Error %d\n", WSAGetLastError());
+	}
 	
 	if (receivedByteCount == 0)
 	{
@@ -946,11 +987,9 @@ int main(int argc, char** argv)
 
 		if(inGame)
 		{
-			// disable player collision by removing function pointer
-			// also disables all turbo pads
-			//int zero = 0;
-			//WriteMem(AddrP1 + 0x70, &zero, sizeof(int));
-
+			// Write to a timer that prevents the AIs from
+			// controlling themselves, this is used when AIs
+			// spin-out after being hit by potions
 			for (int i = 1; i < numPlayers; i++)
 				disableAI_RenameThis(i);
 

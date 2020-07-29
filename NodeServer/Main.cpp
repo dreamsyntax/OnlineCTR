@@ -159,14 +159,25 @@ void BuildListeningSocket()
 	listen(CtrMain.socket, SOMAXCONN);
 }
 
-fd_set master;
-
-void initialize()
+void ResetClients()
 {
 	// set all connections to INVALID_SOCKET
 	for (int i = 0; i < MAX_CLIENTS; i++)
 		memset(&CtrClient[0], 0xFF, sizeof(CtrClient[0]) * MAX_CLIENTS);
 
+	// reset server
+	clientCount = 0;
+	inGame = false;
+	startLine.reset();
+	trackSel.reset();
+
+	printf("\nClientCount: 0\n");
+}
+
+fd_set master;
+
+void initialize()
+{
 	int choice = 0;
 	HWND console = GetConsoleWindow();
 	RECT r;
@@ -189,10 +200,7 @@ void initialize()
 
 	BuildListeningSocket();
 
-	startLine.reset();
-	trackSel.reset();
-
-	printf("Host ready on port 1234\n\n");
+	printf("NodeServer ready on port 1234\n\n");
 
 	// set LISTENING socket to non-blocking
 	unsigned long nonBlocking = 1;
@@ -200,6 +208,8 @@ void initialize()
 
 	FD_ZERO(&master);
 	FD_SET(CtrMain.socket, &master);
+
+	ResetClients();
 }
 
 void CheckForNewClients()
@@ -396,38 +406,56 @@ void HandleClient(int i)
 	memset(&CtrClient[i].recvBuf, 0xFF, sizeof(Message));
 	receivedByteCount = recv(CtrClient[i].socket, (char*)&CtrClient[i].recvBuf, sizeof(Message), 0);
 
+	// check for errors
 	if (receivedByteCount == -1)
-		goto SendToClient;
-	//printf("Error %d\n", WSAGetLastError());
-
-	if (receivedByteCount == 0)
 	{
-		// disconnect
+		int err = WSAGetLastError();
 
-		printf("Someone disconnected\n");
+#if TEST_DEBUG
+		printf("Error %d\n", err);
+#endif
 
-		// if this is not the last client
-		if (i != clientCount - 1)
+		// if someone disconnected
+		if (err == WSAECONNRESET)
 		{
-			// shift all existing clients
-			for (int j = i; j < clientCount; j++)
-				memcpy(&CtrClient[i], &CtrClient[i + 1], sizeof(CtrClient));
+			// If one person disconnects, boot everybody
+#if 1
+			ResetClients();
+			return;
+#endif
 
-			// repeat the loop for this socket index,
-			// since a new socket is in that place
-			i--;
+			// This will be used in MasterServer, where we dont kick all players
+			// because of one disconnection. However, we can't do that in NodeServer rn
+#if 0
+			// if this is not the last client
+			if (i != clientCount - 1)
+			{
+				// shift all existing clients
+				for (int j = i; j < clientCount; j++)
+					memcpy(&CtrClient[i], &CtrClient[i + 1], sizeof(CtrClient));
+
+				// repeat the loop for this socket index,
+				// since a new socket is in that place
+				i--;
+			}
+
+			clientCount--;
+			CtrClient[clientCount].socket = INVALID_SOCKET;
+
+			return;
+#endif
 		}
 
-		clientCount--;
-		CtrClient[clientCount].socket = INVALID_SOCKET;
-
-		return;
+		goto SendToClient;
 	}
 
+	// check for incomplete message
 	if (receivedByteCount < CtrClient[i].recvBuf.size)
 	{
-		//printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
-			//recvBuf.type, recvBuf.size, receivedByteCount);
+#if TEST_DEBUG
+		printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
+			recvBuf.type, recvBuf.size, receivedByteCount);
+#endif
 
 		goto SendToClient;
 	}

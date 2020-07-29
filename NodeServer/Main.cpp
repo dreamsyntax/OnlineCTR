@@ -159,11 +159,19 @@ void BuildListeningSocket()
 	listen(CtrMain.socket, SOMAXCONN);
 }
 
+fd_set master;
+
 void ResetClients()
 {
+	// close sockets, if open
+	for (int i = 0; i < clientCount; i++)
+	{
+		closesocket(CtrClient[i].socket);
+		FD_CLR(CtrClient[i].socket, &master);
+	}
+
 	// set all connections to INVALID_SOCKET
-	for (int i = 0; i < MAX_CLIENTS; i++)
-		memset(&CtrClient[0], 0xFF, sizeof(CtrClient[0]) * MAX_CLIENTS);
+	memset(&CtrClient[0], 0xFF, sizeof(CtrClient[0]) * MAX_CLIENTS);
 
 	// reset server
 	clientCount = 0;
@@ -173,8 +181,6 @@ void ResetClients()
 
 	printf("\nClientCount: 0\n");
 }
-
-fd_set master;
 
 void initialize()
 {
@@ -230,6 +236,13 @@ void CheckForNewClients()
 		{
 			// Accept a new connection
 			SOCKET client = accept(CtrMain.socket, nullptr, nullptr);
+
+			if (clientCount == MAX_CLIENTS)
+			{
+				closesocket(client);
+				FD_CLR(CtrClient[i].socket, &master);
+				return;
+			}
 
 			// Add the new connection to the list of connected clients
 			FD_SET(client, &master);

@@ -15,6 +15,13 @@ Connect to NodeServer
 	emulator. It is confirmed to work with ePSXe 2.0.5 and Bizhawk, it is
 	confirmed not to work with Rpcs3, it will probably work in any other emu
 
+	Connection Lost:
+		- You enter the wrong IP
+		- The server is down
+		- The server is full
+		- A member of your group disconnected, and the
+			NodeServer resets (which is a design choice)
+
 Host a Game
 	The host of any game is the first client to connect to the NodeServer.
 	Hosting a game means you are the one that chooses the track,
@@ -44,7 +51,7 @@ Start the race
 		- The game host did not connect properly
 		- The game guests did not connect properly
 
-Additional races
+Consecutive races
 	Choose "Change Character" or "Change Level", then wait at the track selection
 	until the host and all clients are in the track selection, and then the host starts the
 	next race. You can choose "Change Character" or "Change Level" after you finish

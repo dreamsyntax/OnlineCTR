@@ -499,6 +499,27 @@ void (*RecvMessage[6]) () =
 	RecvStartRaceMessage
 };
 
+void Disconnect()
+{
+	system("cls");
+	printf("Connection Lost\n\n");
+	printf("1. Close Client.exe\n");
+	printf("2. Load your save state\n");
+	printf("3. Open Client.exe and reconnect\n");
+
+	while (true)
+	{
+		// set controller mode to 0P mode, trigger error message
+		char _0 = 0;
+		WriteMem(0x800987C9, &_0, sizeof(_0));
+
+		// change the error message
+		WriteMem(0x800BC684, (char*)"Connection Lost", 23);
+
+		Sleep(1);
+	}
+}
+
 void updateNetwork()
 {
 	// Get a message
@@ -511,29 +532,17 @@ void updateNetwork()
 		int err = WSAGetLastError();
 
 //#if TEST_DEBUG
-		printf("Error %d\n", err);
+		// This happens due to nonblock, ignore it
+		if (err != WSAEWOULDBLOCK)
+		{
+			printf("Error %d\n", err);
+		}
 //#endif
 
-		// if someone disconnected
+		// if server is closed disconnected
 		if (err == WSAECONNRESET)
 		{
-			system("cls");
-			printf("Connection Lost\n\n");
-			printf("1. Close Client.exe\n");
-			printf("2. Load your save state\n");
-			printf("3. Open Client.exe and reconnect\n");
-
-			while (true)
-			{
-				// set controller mode to 0P mode, trigger error message
-				char _0 = 0;
-				WriteMem(0x800987C9, &_0, sizeof(_0));
-
-				// change the error message
-				WriteMem(0x800BC684, (char*)"Connection Lost", 23);
-
-				Sleep(1);
-			}
+			Disconnect();
 		}
 
 		if (err == WSAENOTCONN)
@@ -550,11 +559,12 @@ void updateNetwork()
 		goto SendToServer;
 	}
 	
+	// This happens when the server uses closesocket(),
+	// either because you connected to a full server, or
+	// a client disconnected so the server reset
 	if (receivedByteCount == 0)
 	{
-		printf("Disconnected\n");
-		system("pause");
-		exit(0);
+		Disconnect();
 	}
 	
 	if (receivedByteCount < CtrMain.recvBuf.size)

@@ -16,11 +16,16 @@ Connect to NodeServer
 	confirmed not to work with Rpcs3, it will probably work in any other emu
 
 	Connection Lost:
-		- You enter the wrong IP
-		- The server is down
-		- The server is full
-		- A member of your group disconnected, and the
-			NodeServer resets (which is a design choice)
+		While trying to connect
+			- You enter the wrong IP
+			- The server is down
+			- The server did not use port forwarding
+			- The server is full
+			- The server has a race in progress
+		While in a race
+			- The server shut down
+			- A member of your group disconnected, and the
+				NodeServer resets (which is a design choice)
 
 Host a Game
 	The host of any game is the first client to connect to the NodeServer.
@@ -46,16 +51,15 @@ Avoid bugs:
 Start the race
 	The host chooses the race, and number of laps, then starts the race.
 	All guests should automatically mimic the host, without pressing buttons.
-	If guests do not start loading a level when the host does, it means either:
-		- The NodeServer does not have port forwarding
-		- The game host did not connect properly
-		- The game guests did not connect properly
+	If guests do not start loading a level when the host does, it is
+		random bad luck, just close and try again
 
 Consecutive races
 	Choose "Change Character" or "Change Level", then wait at the track selection
 	until the host and all clients are in the track selection, and then the host starts the
 	next race. You can choose "Change Character" or "Change Level" after you finish
-	a race, or you can pause the game and leave without finishing, the choice is yours
+	a race, or you can pause the game and leave without finishing, the choice is yours.
+	More players can join while you're in the menus, if the server is not full
 
 Most commonly asked questions
 

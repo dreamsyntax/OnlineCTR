@@ -994,6 +994,14 @@ int main(int argc, char** argv)
 			// constantly write these values,
 			// to make sure the right characters are loaded
 			SendOnlinePlayersToRAM();
+
+			// Write Track LOD to 5
+			// 1 = 1P graphics
+			// 2 = 2P graphics
+			// ...
+			// 5 = 1P graphics with no boxes, and no weapons
+			char five = 5;
+			WriteMem(0x8008D83C, &five, sizeof(char));
 		}
 
 

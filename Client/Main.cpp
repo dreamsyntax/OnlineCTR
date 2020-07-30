@@ -181,7 +181,7 @@ void initialize()
 	printf("\n");
 	printf("Step 1: Open any ps1 emulator\n");
 	printf("Step 2: Open CTR SCUS_94426\n");
-	printf("Step 3: Go to Arcade->1P->Easy\n");
+	printf("Step 3: Go to Time Trial from main menu\n");
 	printf("Step 4: Save state, then load it, (required)\n");
 	printf("\n");
 	printf("Step 5: Enter emulator PID from 'Details'\n");
@@ -758,6 +758,35 @@ void SendCharacterID()
 	CtrMain.sendBuf.data[0] = (char)characterIDs[0];
 }
 
+void SwapModes()
+{
+	// Get the game mode
+	unsigned int gameMode = 0;
+	ReadMem(0x80096B20, &gameMode, sizeof(int));
+
+	// Disable Time Trial (0x20000)
+	gameMode = gameMode & 0xFFFDFFFF;
+
+	// Enable Arcade
+	gameMode = gameMode | 0x400000;
+
+	// Write mode
+	WriteMem(0x80096B20, &gameMode, sizeof(int));
+
+	// if you're in main menu
+	if (gameMode & 0x2000)
+	{
+		char name[7] = "Arcade";
+		WriteMem(0x800BCC59, name, 7);
+	}
+
+	else
+	{
+		char name[7] = "Online";
+		WriteMem(0x800BCC59, name, 7);
+	}
+}
+
 void HandleInjectionASM()
 {
 	// test to see if someone loaded a save state
@@ -765,6 +794,10 @@ void HandleInjectionASM()
 	// If you're ingame, you probably saved a state with injection
 	if (inGame)
 		return;
+
+	// Do this regardless if ASM already injected,
+	// just in case someone left time trial and went back
+	SwapModes();
 
 	// If you're not ingame, your state might not have injection
 	short TestHighMpk;
@@ -961,11 +994,6 @@ int main(int argc, char** argv)
 			// constantly write these values,
 			// to make sure the right characters are loaded
 			SendOnlinePlayersToRAM();
-
-			// dont "continue" to reset the iteration,
-			// because if you load a state from a race,
-			// you need to check "if ingame, if not in race,
-			// then tell server not in race"
 		}
 
 

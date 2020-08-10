@@ -124,7 +124,7 @@ int roll(int min, int max)
 	return that;
 }
 
-void DisableAI()
+void DisableAI_ASM()
 {
 	// Stop AI system from writing position data
 	int zero = 0;
@@ -288,19 +288,84 @@ void initialize()
 	printf("\n");
 }
 
-void disableAI_RenameThis(int aiNumber)
+void DisableAI_RAM(int aiNumber)
 {
 	unsigned int AddrAI = AddrP1;
 	AddrAI -= 0x670 * aiNumber;
 
-	// This stops the AI from proceding with the NAV system,
-	// but with this, the AI's values still get set to the 
-	// values that the NAV system wants the AI to have at the starting line
 	int _30 = 30;
+
+	// 604 has value when you spin out, it is time remaining until the AI can 
+	// follow NAV data. Locking to 30 makes it so AI never follows NAV path,
+	// and I can override all the variables
 	WriteMem(AddrAI + 0x604, &_30, sizeof(int));
+
+	// 624 has value when race starts, and after using a weapon. It is cooldown
+	// time before shooting another weapon. If always active, then AIs wont 
+	// randomly shoot weapons. 
+	WriteMem(AddrAI + 0x624, &_30, sizeof(int));
 }
 
-void drawAI(int aiNumber, char* data)
+void InjectAllocationPool()
+{
+	// When the allocation pool is linked, the game thinks other 
+	// AIs are humans, and it runs human-driver code. As a result,
+	// you can set P2 + 0x2c8 to & 0x8000 to fire a weapon, and
+	// you can set the weapon with P2 + 0x36
+
+	// However, after testing with missiles, the missiles dont
+	// "lock on" the way they normally should. Might need asm work.
+	// TNTs and Potions should work fine
+
+	// Also, when doing this, the game attempts to draw P2's HUD,
+	// so you see P2's weapon icon, lap 1/3, etc. This needs to
+	// be disabled with ASM-patching
+
+	// For the same reason, the patching needs to happen after
+	// the race starts, or else it tries to draw P2's traffic lights,
+	// and then the graphics corrupt and get destroyed
+
+#if 0
+	// This is the same allocation pool system as my AllocPoolsCTR code
+
+	int playerPoolAddr;
+	ReadMem(0x80096B20 + 0x1b2c, &playerPoolAddr, sizeof(int));
+
+	// do this for number of online players
+	for (int i = 0; i < numPlayers-1; i++)
+	{
+		// link all drivers together, to make them appear
+		// all human, in the eyes of the weapon handler
+
+		int nextAddr = playerPoolAddr - 0x48;
+
+		WriteMem(playerPoolAddr + 0x10, &nextAddr, sizeof(int));
+		
+		playerPoolAddr = nextAddr;
+	}
+#endif
+
+	// Alternative
+	// Replace ASM for weapon loop,
+	// Then there are no graphics bugs,
+	// but missiles still wont seek
+
+	// Remove ASM that says
+
+	// ptr = 8008d2ac + 0x1b2c
+	// CheckForShoot ( ptr + 0x30 )
+	// ptr = ptr + 0x10
+	// if ptr != 0, then go 2 lines back
+
+	// Replace it with
+
+	// ptr = 8008d2ac + 24ec <--- 9900C
+	// CheckForShoot ( ptr )
+	// ptr = ptr + 4
+	// if ptr != 0, then go 2 lines back
+}
+
+void DrawAI(int aiNumber, char* data)
 {
 	unsigned int AddrAI = AddrP1;
 	AddrAI -= 0x670 * aiNumber;
@@ -466,7 +531,7 @@ void RecvPosMessage()
 		// draw all AIs
 		for (int i = 0; i < numPlayers - 1; i++)
 		{
-			drawAI(i + 1, (char*)&CtrMain.recvBuf.data[Type3_Size * i]);
+			DrawAI(i + 1, (char*)&CtrMain.recvBuf.data[Type3_Size * i]);
 		}
 	}
 }
@@ -814,6 +879,8 @@ void HandleInjectionASM()
 
 	// Ja ra, return asm, 
 	// disable weapons for players and enemies
+	// This is only used for player, becuase enemies are
+	// now disabled by locking their 0x624 offset to 30
 	int jaRa = 0x3e00008;
 	WriteMem(0x8006540C, &jaRa, sizeof(int));
 
@@ -907,7 +974,7 @@ void HandleTrackSelection()
 		return;
 
 	// Disable AIs so that humans can be injected
-	DisableAI();
+	DisableAI_ASM();
 
 	// Get characterID for this player
 	ReadMem(0x80086E84, &characterIDs[0], sizeof(short));
@@ -970,7 +1037,7 @@ int main(int argc, char** argv)
 		// handle all message reading and writing
 		updateNetwork();
 
-		// disable weapons, load high LODs
+		// load secret characters, high lods, etc
 		HandleInjectionASM();
 
 		// L2 or oxide, R2 for random
@@ -994,6 +1061,10 @@ int main(int argc, char** argv)
 			// constantly write these values,
 			// to make sure the right characters are loaded
 			SendOnlinePlayersToRAM();
+
+			// LOD 5 is needed cause some weapons
+			// break everything when I try to disable them,
+			// people report warp ball causes connection lost
 
 			// Write Track LOD to 5
 			// 1 = 1P graphics
@@ -1027,6 +1098,9 @@ int main(int argc, char** argv)
 				if (introAnimState == 0)
 				{
 					inGame = true;
+
+					// Needed for weapons
+					InjectAllocationPool();
 				}
 			}
 		}
@@ -1037,7 +1111,7 @@ int main(int argc, char** argv)
 			// controlling themselves, this is used when AIs
 			// spin-out after being hit by potions
 			for (int i = 1; i < numPlayers; i++)
-				disableAI_RenameThis(i);
+				DisableAI_RAM(i);
 
 			// If not all racers are ready to start
 			if (startLine_wait)

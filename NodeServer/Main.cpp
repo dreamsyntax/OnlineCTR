@@ -45,10 +45,10 @@ void acceptTCP(SOCKET& origSock)
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TEST_DEBUG 0
+#define TEST_DEBUG 1
 
-// 3 ints, 3 shorts
-const int Type3_Size = 18;
+// one short, for controller input
+const int Type3_Size = 2;
 
 struct Message
 {
@@ -61,8 +61,8 @@ struct Message
 	//		[null]
 
 	// [bidirectional]
-	// 3 for position
-	//		posX, posY, posZ
+	// 3 for controller input
+	//		2 bytes of buttons
 
 	// [client -> server]
 	// 4 for kart IDs
@@ -77,15 +77,10 @@ struct Message
 
 	// max data size
 	// 3x
-		// int posX		-- 4
-		// int posY		-- 8
-		// int posZ		-- 12
-		// short rotX	-- 14
-		// short rotY	-- 16
-		// short rotZ	-- 18
+		// 2 bytes of controller data
 
 	// Server and client MUST match
-	char data[18 * 4]; // should be * 3, but then 4P breaks
+	char data[2 * 4]; // should be * 3, but then 4P breaks
 };
 
 struct SocketCtr
@@ -96,12 +91,7 @@ struct SocketCtr
 	Message recvBuf;
 	Message recvBufPrev;
 
-	// pos and rot MUST be together
-	int pos[3];
-	short rot[3];
-
-	// unused, but has potential
-	bool needCompress;
+	unsigned short controllerInput;
 };
 
 SocketCtr CtrMain;
@@ -189,7 +179,7 @@ void initialize()
 	RECT r;
 	GetWindowRect(console, &r); //stores the console's current dimensions
 
-	const int winW = TEST_DEBUG ? 1000 : 400;
+	const int winW = TEST_DEBUG ? 800 : 400;
 
 	// 300 + height of bar (35)
 	MoveWindow(console, r.left, r.top, winW, 240+35, TRUE);
@@ -349,16 +339,11 @@ void RecvStartLoadingMessage(int sender)
 void RecvPosMessage(int sender)
 {
 	// store a backup
-	memcpy(&CtrClient[sender].pos[0], &CtrClient[sender].recvBuf.data[0], Type3_Size);
+	memcpy(&CtrClient[sender].controllerInput, &CtrClient[sender].recvBuf.data[0], Type3_Size);
 
 #if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d, -- %08X %08X %08X %04X %04X %04X from %d\n", type, size,
-		*(int*)&CtrClient[sender].recvBuf.data[0],
-		*(int*)&CtrClient[sender].recvBuf.data[4],
-		*(int*)&CtrClient[sender].recvBuf.data[8],
-		*(short*)&CtrClient[sender].recvBuf.data[12],
-		*(short*)&CtrClient[sender].recvBuf.data[14],
-		*(short*)&CtrClient[sender].recvBuf.data[16],
+	printf("Recv -- Tag: %d, size: %d, -- %04X from %d\n", type, size,
+		*(short*)&CtrClient[sender].recvBuf.data[0],
 		sender);
 #endif
 }
@@ -425,7 +410,10 @@ void HandleClient(int i)
 		int err = WSAGetLastError();
 
 #if TEST_DEBUG
-		printf("Error %d\n", err);
+		if (err != WSAEWOULDBLOCK)
+		{
+			printf("Error %d\n", err);
+		}
 #endif
 
 		// if someone disconnected
@@ -467,7 +455,7 @@ void HandleClient(int i)
 	{
 #if TEST_DEBUG
 		printf("Bug! -- Tag: %d, recvBuf.size: %d, recvCount: %d\n",
-			recvBuf.type, recvBuf.size, receivedByteCount);
+			CtrClient[i].recvBuf.type, CtrClient[i].recvBuf.size, receivedByteCount);
 #endif
 
 		goto SendToClient;
@@ -538,11 +526,9 @@ SendToClient:
 
 	if (type == 3)
 	{
-		int i1 = *(int*)&CtrClient[i].sendBuf.data[0];
-		int i2 = *(int*)&CtrClient[i].sendBuf.data[4];
-		int i3 = *(int*)&CtrClient[i].sendBuf.data[8];
+		short s1 = *(short*)&CtrClient[i].sendBuf.data[0];
 
-		printf("Send -- Tag: %d, size: %d, -- %08X %08X %08X\n", type, size, i1, i2, i3);
+		printf("Send -- Tag: %d, size: %d, -- %04X\n", type, size, s1);
 	}
 
 	// type 4 will not come from server
@@ -567,7 +553,7 @@ void preparePositionMessage()
 		sendBuf = &CtrClient[i].sendBuf;
 
 		sendBuf->type = 3;
-		sendBuf->size = 2 + Type3_Size * clientCount;
+		sendBuf->size = 2 + Type3_Size * (clientCount-1);
 
 		int k = 0;
 
@@ -576,7 +562,7 @@ void preparePositionMessage()
 			if (i == j)
 				continue;
 
-			memcpy(&sendBuf->data[Type3_Size * k], &CtrClient[j].pos[0], Type3_Size);
+			memcpy(&sendBuf->data[Type3_Size * k], &CtrClient[j].controllerInput, Type3_Size);
 
 			k++;
 		}

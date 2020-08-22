@@ -31,10 +31,10 @@ bool isHost = false;
 short inCharSelection = 0;
 bool inTrackSelection = false;
 
-#define TEST_DEBUG 0
+#define TEST_DEBUG 1
 
-// 3 ints, 3 shorts
-const int Type3_Size = 18;
+// one short, for controller input
+const int Type3_Size = 2;
 
 struct Message
 {
@@ -47,8 +47,8 @@ struct Message
 	//		[null]
 
 	// [bidirectional]
-	// 3 for position
-	//		posX, posY, posZ
+	// 3 for controller input
+	//		2 bytes of buttons
 
 	// [client -> server]
 	// 4 for kart IDs
@@ -62,16 +62,11 @@ struct Message
 	unsigned char size;
 
 	// max data size
-	// 3x
-		// int posX		-- 4
-		// int posY		-- 8
-		// int posZ		-- 12
-		// short rotX	-- 14
-		// short rotY	-- 16
-		// short rotZ	-- 18
+	// 2 for controller short
+	// 4 for num players (should only need 3)
 
 	// Server and client MUST match
-	char data[18 * 4]; // should be * 3, but then 4P breaks
+	char data[2 * 4]; // should be * 3, but then 4P breaks
 };
 
 struct SocketCtr
@@ -82,12 +77,7 @@ struct SocketCtr
 	Message recvBuf;
 	Message recvBufPrev;
 
-	// pos and rot MUST be together
-	int pos[3];
-	short rot[3];
-
-	// unused, but has potential
-	bool needCompress;
+	unsigned short controllerInput;
 };
 
 SocketCtr CtrMain;
@@ -159,7 +149,7 @@ void initialize()
 	RECT r;
 	GetWindowRect(console, &r); //stores the console's current dimensions
 
-	const int winW = TEST_DEBUG ? 1000 : 400;
+	const int winW = TEST_DEBUG ? 800 : 400;
 
 	// 300 + height of bar (35)
 	MoveWindow(console, r.left, r.top, winW, 240+35, TRUE);
@@ -275,25 +265,6 @@ void initialize()
 	printf("Press L2 for Oxide\n");
 	printf("Press R2 for Random\n");
 	printf("\n");
-}
-
-void DrawAI(int aiNumber, char* data)
-{
-	// Back when we edited AIs, it was "-= 0x670"
-	// Now that we edit players, it's "+= 0x670"
-
-	unsigned int AddrAI = AddrP1;
-	AddrAI += 0x670 * aiNumber;
-	
-	// position
-	WriteMem(AddrAI + 0x2d4, &data[0], sizeof(int));
-	WriteMem(AddrAI + 0x2d8, &data[4], sizeof(int));
-	WriteMem(AddrAI + 0x2dc, &data[8], sizeof(int));
-
-	// rotation
-	WriteMem(AddrAI + 0x2ec, &data[12], sizeof(short));
-	WriteMem(AddrAI + 0x2ee, &data[14], sizeof(short));
-	WriteMem(AddrAI + 0x2f0, &data[16], sizeof(short));
 }
 
 // globals
@@ -427,13 +398,8 @@ void RecvPosMessage()
 	
 	for (int i = 0; i < numPlayers - 1; i++)
 	{
-		printf("%08X %08X %08X %04X %04X %04X",
-			*(int*)&CtrMain.recvBuf.data[Type3_Size * i + 0],
-			*(int*)&CtrMain.recvBuf.data[Type3_Size * i + 4],
-			*(int*)&CtrMain.recvBuf.data[Type3_Size * i + 8]
-			*(short*)&CtrMain.recvBuf.data[Type3_Size * i + 12],
-			*(short*)&CtrMain.recvBuf.data[Type3_Size * i + 14],
-			*(short*)&CtrMain.recvBuf.data[Type3_Size * i + 16], );
+		printf("%04X ",
+			*(short*)&CtrMain.recvBuf.data[Type3_Size * i + 0]);
 	}
 	printf("\n");
 #endif
@@ -446,7 +412,7 @@ void RecvPosMessage()
 		// draw all AIs
 		for (int i = 0; i < numPlayers - 1; i++)
 		{
-			DrawAI(i + 1, (char*)&CtrMain.recvBuf.data[Type3_Size * i]);
+			WriteMem(0x80096804 + 0x50 * (i+1) + 0x10, &CtrMain.recvBuf.data[Type3_Size * i + 0], sizeof(short));
 		}
 	}
 }
@@ -597,11 +563,9 @@ SendToServer:
 	
 	if (type == 3)
 	{
-		int i1 = *(int*)&CtrMain.sendBuf.data[0];
-		int i2 = *(int*)&CtrMain.sendBuf.data[4];
-		int i3 = *(int*)&CtrMain.sendBuf.data[8];
+		short s1 = *(int*)&CtrMain.sendBuf.data[0];
 	
-		printf("Send -- Tag: %d, size: %d, -- %08X %08X %08X \n", type, size, i1, i2, i3);
+		printf("Send -- Tag: %d, size: %d, -- %04X \n", type, size, s1);
 	}
 	
 	if (type == 4)
@@ -828,6 +792,11 @@ void HandleInjectionASM()
 
 	// Fix 3D HUD (wumpa fruit)
 	WriteMem(0x8004CE88, &zero, sizeof(zero));
+
+	// Erase controller loop, so it doesn't
+	// overwrite the controls I inject, with 
+	// data from emulated controllers
+	WriteMem(0x80025844, &zero, sizeof(zero));
 }
 
 void HandleCharacterSelection()
@@ -1026,7 +995,6 @@ int main(int argc, char** argv)
 			{
 				if (gameStateCurr == 11 || gameStateCurr == 10)
 				{
-
 					// see if the intro cutscene is playing
 					// becomes 0 when traffic lights should show
 					char introAnimState;
@@ -1099,16 +1067,9 @@ int main(int argc, char** argv)
 					)
 				{
 					CtrMain.sendBuf.type = 3;
-					CtrMain.sendBuf.size = 14;
+					CtrMain.sendBuf.size = 4;
 
-					// Get Player 1 position
-					// All players have 12-byte positions (4x3). 
-					// Changing those coordinates will not move
-					// the players. 
-					ReadMem(AddrP1 + 0x2D4, &CtrMain.sendBuf.data[0], sizeof(int) * 3);
-
-					// Get Player 1 rotation
-					ReadMem(AddrP1 + 0x2ec, &CtrMain.sendBuf.data[12], sizeof(short) * 3);
+					ReadMem(0x80096804 + 0x50*0 + 0x10, &CtrMain.sendBuf.data[0], sizeof(short));
 				}
 
 				// if you finished or left the race

@@ -3,6 +3,8 @@
 
 #define WIN32_LEAN_AND_MEAN
 
+#define ADV_HUB_TEST 0
+
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -122,19 +124,6 @@ int roll(int min, int max)
 	int that = min + static_cast<int>(x * (max - min));
 
 	return that;
-}
-
-void DisableAI_ASM()
-{
-	// Stop AI system from writing position data
-	int zero = 0;
-	WriteMem(0x80015538, &zero, sizeof(int));
-	WriteMem(0x80015560, &zero, sizeof(int));
-	WriteMem(0x80015594, &zero, sizeof(int));
-
-	char data[0x18];
-	memset(data, 0, 0x18);
-	WriteMem(0x80016470, data, 0x18);
 }
 
 void
@@ -288,92 +277,18 @@ void initialize()
 	printf("\n");
 }
 
-void DisableAI_RAM(int aiNumber)
-{
-	unsigned int AddrAI = AddrP1;
-	AddrAI -= 0x670 * aiNumber;
-
-	int _30 = 30;
-
-	// 604 has value when you spin out, it is time remaining until the AI can 
-	// follow NAV data. Locking to 30 makes it so AI never follows NAV path,
-	// and I can override all the variables
-	WriteMem(AddrAI + 0x604, &_30, sizeof(int));
-
-	// 624 has value when race starts, and after using a weapon. It is cooldown
-	// time before shooting another weapon. If always active, then AIs wont 
-	// randomly shoot weapons. 
-	WriteMem(AddrAI + 0x624, &_30, sizeof(int));
-}
-
-void InjectAllocationPool()
-{
-	// When the allocation pool is linked, the game thinks other 
-	// AIs are humans, and it runs human-driver code. As a result,
-	// you can set P2 + 0x2c8 to & 0x8000 to fire a weapon, and
-	// you can set the weapon with P2 + 0x36
-
-	// However, after testing with missiles, the missiles dont
-	// "lock on" the way they normally should. Might need asm work.
-	// TNTs and Potions should work fine
-
-	// Also, when doing this, the game attempts to draw P2's HUD,
-	// so you see P2's weapon icon, lap 1/3, etc. This needs to
-	// be disabled with ASM-patching
-
-	// For the same reason, the patching needs to happen after
-	// the race starts, or else it tries to draw P2's traffic lights,
-	// and then the graphics corrupt and get destroyed
-
-#if 0
-	// This is the same allocation pool system as my AllocPoolsCTR code
-
-	int playerPoolAddr;
-	ReadMem(0x80096B20 + 0x1b2c, &playerPoolAddr, sizeof(int));
-
-	// do this for number of online players
-	for (int i = 0; i < numPlayers-1; i++)
-	{
-		// link all drivers together, to make them appear
-		// all human, in the eyes of the weapon handler
-
-		int nextAddr = playerPoolAddr - 0x48;
-
-		WriteMem(playerPoolAddr + 0x10, &nextAddr, sizeof(int));
-		
-		playerPoolAddr = nextAddr;
-	}
-#endif
-
-	// Alternative
-	// Replace ASM for weapon loop,
-	// Then there are no graphics bugs,
-	// but missiles still wont seek
-
-	// Remove ASM that says
-
-	// ptr = 8008d2ac + 0x1b2c
-	// CheckForShoot ( ptr + 0x30 )
-	// ptr = ptr + 0x10
-	// if ptr != 0, then go 2 lines back
-
-	// Replace it with
-
-	// ptr = 8008d2ac + 24ec <--- 9900C
-	// CheckForShoot ( ptr )
-	// ptr = ptr + 4
-	// if ptr != 0, then go 2 lines back
-}
-
 void DrawAI(int aiNumber, char* data)
 {
+	// Back when we edited AIs, it was "-= 0x670"
+	// Now that we edit players, it's "+= 0x670"
+
 	unsigned int AddrAI = AddrP1;
-	AddrAI -= 0x670 * aiNumber;
+	AddrAI += 0x670 * aiNumber;
 	
 	// position
-	WriteMem(AddrAI + 0x5f0, &data[0], sizeof(int));
-	WriteMem(AddrAI + 0x5f4, &data[4], sizeof(int));
-	WriteMem(AddrAI + 0x5f8, &data[8], sizeof(int));
+	WriteMem(AddrAI + 0x2d4, &data[0], sizeof(int));
+	WriteMem(AddrAI + 0x2d8, &data[4], sizeof(int));
+	WriteMem(AddrAI + 0x2dc, &data[8], sizeof(int));
 
 	// rotation
 	WriteMem(AddrAI + 0x2ec, &data[12], sizeof(short));
@@ -706,8 +621,19 @@ SendToServer:
 
 void SendOnlinePlayersToRAM()
 {
-	// set number of players, prevent extra AIs from spawning
-	WriteMem(0x8003B83C, &numPlayers, sizeof(numPlayers));
+	// 0xffff (-1) spawns one player
+	// 0 spawns 2 players
+	// 1 spawns 3 players, etc
+	if (numPlayers != 1)
+	{
+		short playerMin2 = numPlayers - 2;
+		WriteMem(0x8003B750, &playerMin2, sizeof(playerMin2));
+	}
+
+	// Value 8 by default, which spawns 8 racers
+	// As 1, or anything else, it removes AIs
+	char one = 1;
+	WriteMem(0x8003B83C, &one, sizeof(one));
 
 	// set number of icons (on the left of the screen)
 	if(numPlayers < 4)
@@ -877,16 +803,11 @@ void HandleInjectionASM()
 	unsigned long long value = 0xFFFFFFFFFFFFFFFF;
 	WriteMem(0x8008E6EC, &value, sizeof(value));
 
-	// Ja ra, return asm, 
-	// disable weapons for players and enemies
-	// This is only used for player, becuase enemies are
-	// now disabled by locking their 0x624 offset to 30
-	int jaRa = 0x3e00008;
-	WriteMem(0x8006540C, &jaRa, sizeof(int));
+	int zero = 0;
 
+#if ADV_HUB_TEST == 0
 	// Patch the first if-statement of FUN_8003282c
 	// Allow 4 characters to load in high LOD
-	int zero = 0;
 	WriteMem(0x80032840, &zero, sizeof(int));
 
 	// Only first 3 characters are high lod
@@ -894,9 +815,19 @@ void HandleInjectionASM()
 	WriteMem(0x80032888, &HighMpk, sizeof(short));
 	WriteMem(0x800328A4, &HighMpk, sizeof(short));
 	WriteMem(0x800328C0, &HighMpk, sizeof(short));
+#endif
 
 	// Disable collision between players
 	WriteMem(0x80042368, &zero, sizeof(int));
+
+	// NOP instructions that recursively 
+	// loop through all players to draw all HUDs
+
+	// Fix 2D HUD (lap, powerslide meter)
+	WriteMem(0x80053B8C, &zero, sizeof(zero));
+
+	// Fix 3D HUD (wumpa fruit)
+	WriteMem(0x8004CE88, &zero, sizeof(zero));
 }
 
 void HandleCharacterSelection()
@@ -973,9 +904,6 @@ void HandleTrackSelection()
 	if (!inTrackSelection)
 		return;
 
-	// Disable AIs so that humans can be injected
-	DisableAI_ASM();
-
 	// Get characterID for this player
 	ReadMem(0x80086E84, &characterIDs[0], sizeof(short));
 
@@ -1047,6 +975,26 @@ int main(int argc, char** argv)
 		// this does not handle recv or injecting track values
 		HandleTrackSelection();
 
+		// Test Online in Adventure
+		#if ADV_HUB_TEST == 1
+			char map = 25;
+			WriteMem(0x80096B20 + 0x1EB0, &map, sizeof(map));
+		
+			// 100% unlock everything
+			unsigned char advData[16];
+			for (int i = 0; i < 16; i++)
+			{
+				advData[i] = 0xFF;
+			}
+		
+			WriteMem(0x8008fba4, advData, sizeof(advData));
+
+			// RAM Expansion
+			int ramExpand = 0x807FF800;
+			WriteMem(0x800990EC, &ramExpand, sizeof(ramExpand));
+			WriteMem(0x800990F0, &ramExpand, sizeof(ramExpand));
+		#endif
+
 		// GameState
 		// 2 = loading screen
 		// 10 = some menus, intro of race (including traffic lights)
@@ -1061,18 +1009,6 @@ int main(int argc, char** argv)
 			// constantly write these values,
 			// to make sure the right characters are loaded
 			SendOnlinePlayersToRAM();
-
-			// LOD 5 is needed cause some weapons
-			// break everything when I try to disable them,
-			// people report warp ball causes connection lost
-
-			// Write Track LOD to 5
-			// 1 = 1P graphics
-			// 2 = 2P graphics
-			// ...
-			// 5 = 1P graphics with no boxes, and no weapons
-			char five = 5;
-			WriteMem(0x8008D83C, &five, sizeof(char));
 		}
 
 
@@ -1085,34 +1021,40 @@ int main(int argc, char** argv)
 			if (
 				timer > 30 &&
 				!inTrackSelection &&
-				inCharSelection != 18100 &&
-				(gameStateCurr == 11 || gameStateCurr == 10)
+				inCharSelection != 18100
 				)
 			{
-				// see if the intro cutscene is playing
-				// becomes 0 when traffic lights should show
-				char introAnimState;
-				ReadMem(0x801FFDDE, &introAnimState, sizeof(char));
-
-				// if the intro animation is done
-				if (introAnimState == 0)
+				if (gameStateCurr == 11 || gameStateCurr == 10)
 				{
-					inGame = true;
 
-					// Needed for weapons
-					InjectAllocationPool();
+					// see if the intro cutscene is playing
+					// becomes 0 when traffic lights should show
+					char introAnimState;
+					ReadMem(0x801FFDDE, &introAnimState, sizeof(char));
+
+					// if the intro animation is done
+					if (introAnimState == 0)
+					{
+						inGame = true;
+					}
 				}
+
+				#if ADV_HUB_TEST == 1
+
+				else
+				{
+					if (gameStateCurr == 43)
+					{
+						inGame = true;
+					}
+				}
+
+				#endif
 			}
 		}
 
 		if(inGame)
 		{
-			// Write to a timer that prevents the AIs from
-			// controlling themselves, this is used when AIs
-			// spin-out after being hit by potions
-			for (int i = 1; i < numPlayers; i++)
-				DisableAI_RAM(i);
-
 			// If not all racers are ready to start
 			if (startLine_wait)
 			{
@@ -1146,7 +1088,15 @@ int main(int argc, char** argv)
 
 				// if you are still in gameplay,
 				// Arcade mode, or Arcade + Intro, or Arcade + Weapon
-				if (flags == 0x400000 || flags == 0x400040 || flags == 0xC00000)
+				if (
+						flags == 0x400000 || 
+						flags == 0x400040 || 
+						flags == 0xC00000
+					
+						#if ADV_HUB_TEST == 1
+						|| flags == 0x500000
+						#endif
+					)
 				{
 					CtrMain.sendBuf.type = 3;
 					CtrMain.sendBuf.size = 14;

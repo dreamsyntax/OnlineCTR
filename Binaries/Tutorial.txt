@@ -61,6 +61,13 @@ Consecutive races
 	a race, or you can pause the game and leave without finishing, the choice is yours.
 	More players can join while you're in the menus, if the server is not full
 
+How to use Adventure Hub
+	Open Client_AdvHub_PublicBeta
+	2 players only
+	Both people choose Crash
+	Start a race on any track
+	You should both spawn in Hub
+
 Most commonly asked questions
 
 Q: When will there be 8P support?
@@ -70,11 +77,7 @@ A: 8P already works, but it is disabled in the consumer-release because the lag
 	injection
 
 Q: When will weapons work?
-A: When we figure out how to make AIs spawn weapons programmatically
-
-Q: Why does Nitro Court and Adventure Arena fail to work
-A: Both fail due to a lack of AI navigation points, Adventure Arena requires
-	additional work to spawn the player on the track, and not in the void
+A: We do have weapons sorta-working, but not stable enough for average players
 
 Q: When will OnlineCTR work on other platforms?
 A1: Linux is on hold until we find how to dynamically search emulators for CTR memory

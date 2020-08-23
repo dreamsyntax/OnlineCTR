@@ -45,10 +45,10 @@ void acceptTCP(SOCKET& origSock)
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TEST_DEBUG 1
+#define TEST_DEBUG 0
 
 // one short, for controller input
-const int Type3_Size = 2;
+const int Type3_Size = 7;
 
 struct Message
 {
@@ -75,12 +75,8 @@ struct Message
 	unsigned char type;
 	unsigned char size;
 
-	// max data size
-	// 3x
-		// 2 bytes of controller data
-
 	// Server and client MUST match
-	char data[2 * 4]; // should be * 3, but then 4P breaks
+	char data[Type3_Size * 3];
 };
 
 struct SocketCtr
@@ -90,8 +86,6 @@ struct SocketCtr
 	Message sendBufPrev;
 	Message recvBuf;
 	Message recvBufPrev;
-
-	unsigned short controllerInput;
 };
 
 SocketCtr CtrMain;
@@ -269,6 +263,9 @@ void RecvTrackMessage(int sender)
 {
 	unsigned char trackID = CtrClient[sender].recvBuf.data[0];
 	characterIDs[0] =		CtrClient[sender].recvBuf.data[1];
+	char lapRowSelected = CtrClient[sender].recvBuf.data[2] & 0b11;
+	char startRace = (CtrClient[sender].recvBuf.data[2] >> 2) & 1;
+	char lapRowOpen = (CtrClient[sender].recvBuf.data[2] >> 3) & 1;
 
 #if TEST_DEBUG
 	printf("Recv -- Tag: %d, size: %d, -- %d %d\n", type, size,
@@ -282,11 +279,10 @@ void RecvTrackMessage(int sender)
 		// track, driver index, num characters, characters
 
 		CtrClient[i].sendBuf.type = 0;
-		CtrClient[i].sendBuf.size = 5 + clientCount;
+		CtrClient[i].sendBuf.size = 6;
 
-		CtrClient[i].sendBuf.data[0] = trackID;
-		CtrClient[i].sendBuf.data[1] = i;
-		CtrClient[i].sendBuf.data[2] = clientCount;
+		CtrClient[i].sendBuf.data[0] = 0;
+		CtrClient[i].sendBuf.data[1] = 0;
 
 		int j = 0;
 		int k = 0;
@@ -295,52 +291,24 @@ void RecvTrackMessage(int sender)
 			if (i == j)
 				continue;
 
-			CtrClient[i].sendBuf.data[3 + k] = (char)characterIDs[j];
+			CtrClient[i].sendBuf.data[k / 2] += (char)characterIDs[j] << (4 * (k%2));
 			k++;
 		}
-	}
-}
 
-void RecvLapMessage(int sender)
-{
-#if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size,
-		CtrClient[sender].recvBuf.data[0]);
-#endif
+		CtrClient[i].sendBuf.data[1] += lapRowSelected << 4;
+		CtrClient[i].sendBuf.data[1] += 1 << 6; //come back to this
+		CtrClient[i].sendBuf.data[1] += startRace << 7;
 
-	// send info to all "other" players
-	for (int i = 0; i < clientCount; i++)
-	{
-		// dont send to yourself
-		if (i == sender) continue;
+		CtrClient[i].sendBuf.data[2] = trackID;
+		CtrClient[i].sendBuf.data[2] += lapRowOpen << 5;
+		CtrClient[i].sendBuf.data[2] += i << 6;
 
-		// lap messages are 3 bytes large
-		memcpy(&CtrClient[i].sendBuf, &CtrClient[sender].recvBuf, 3);
-	}
-}
-
-void RecvStartLoadingMessage(int sender)
-{
-#if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d\n", type, size);
-#endif
-
-	// send to all "other" clients
-	for (int i = 0; i < clientCount; i++)
-	{
-		// dont send to yourself
-		if (i == sender) continue;
-
-		// start race is 2 bytes large
-		memcpy(&CtrClient[i].sendBuf, &CtrClient[sender].recvBuf, 2);
+		CtrClient[i].sendBuf.data[3] = clientCount;
 	}
 }
 
 void RecvPosMessage(int sender)
 {
-	// store a backup
-	memcpy(&CtrClient[sender].controllerInput, &CtrClient[sender].recvBuf.data[0], Type3_Size);
-
 #if TEST_DEBUG
 	printf("Recv -- Tag: %d, size: %d, -- %04X from %d\n", type, size,
 		*(short*)&CtrClient[sender].recvBuf.data[0],
@@ -388,8 +356,8 @@ void (*RecvMessage[7])(int sender) =
 {
 	// These will only be received by the host
 	RecvTrackMessage,
-	RecvLapMessage,
-	RecvStartLoadingMessage,
+	nullptr,
+	nullptr,
 
 	// These are gotten by all
 	RecvPosMessage,
@@ -401,7 +369,6 @@ void (*RecvMessage[7])(int sender) =
 void HandleClient(int i)
 {
 	// Get a message
-	memset(&CtrClient[i].recvBuf, 0xFF, sizeof(Message));
 	receivedByteCount = recv(CtrClient[i].socket, (char*)&CtrClient[i].recvBuf, sizeof(Message), 0);
 
 	// check for errors
@@ -415,7 +382,6 @@ void HandleClient(int i)
 			printf("Error %d\n", err);
 		}
 #endif
-
 		// if someone disconnected
 		if (err == WSAECONNRESET)
 		{
@@ -511,19 +477,6 @@ SendToClient:
 		printf("Send -- Tag: %d, size: %d, -- %d %d\n", type, size, c1, c2);
 	}
 
-	if (type == 1)
-	{
-		// parse message
-		char c1 = CtrClient[i].sendBuf.data[0];
-
-		printf("Send -- Tag: %d, size: %d, -- %d\n", type, size, c1);
-	}
-
-	if (type == 2)
-	{
-		printf("Send -- Tag: %d, size: %d\n", type, size);
-	}
-
 	if (type == 3)
 	{
 		short s1 = *(short*)&CtrClient[i].sendBuf.data[0];
@@ -562,7 +515,9 @@ void preparePositionMessage()
 			if (i == j)
 				continue;
 
-			memcpy(&sendBuf->data[Type3_Size * k], &CtrClient[j].controllerInput, Type3_Size);
+			// Why am I using this new "data" instead of recvBuf???
+			// Investigate later
+			memcpy(&sendBuf->data[Type3_Size * k], &CtrClient[j].recvBuf.data[0], Type3_Size);
 
 			k++;
 		}

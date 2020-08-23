@@ -31,10 +31,10 @@ bool isHost = false;
 short inCharSelection = 0;
 bool inTrackSelection = false;
 
-#define TEST_DEBUG 1
+#define TEST_DEBUG 0
 
 // one short, for controller input
-const int Type3_Size = 2;
+const int Type3_Size = 7;
 
 struct Message
 {
@@ -61,12 +61,8 @@ struct Message
 	unsigned char type;
 	unsigned char size;
 
-	// max data size
-	// 2 for controller short
-	// 4 for num players (should only need 3)
-
 	// Server and client MUST match
-	char data[2 * 4]; // should be * 3, but then 4P breaks
+	char data[Type3_Size * 3];
 };
 
 struct SocketCtr
@@ -93,6 +89,11 @@ unsigned char gameStateCurr;
 unsigned char trackID;
 unsigned char numPlayers = 0;
 unsigned char myDriverIndex = 0; // will never change on server
+
+int iterationCounter = 0;
+
+// Dont start doing anything till you get input
+int framesIdle = 999;
 
 void WriteMem(unsigned int psxAddr, void* pcAddr, int size)
 {
@@ -282,113 +283,130 @@ void RecvTrackMessage()
 		return;
 	}
 
-	// track, driver index, num characters, characters
+	unsigned short twoBytes[2];
+	memcpy(twoBytes, CtrMain.recvBuf.data, 4);
 
-	// parse message
-	char trackByte = CtrMain.recvBuf.data[0];
-	myDriverIndex = CtrMain.recvBuf.data[1];
-	numPlayers = CtrMain.recvBuf.data[2];
+	// 3 bytes, 24 bits
+	// >> 0 -- charID 1
+	// >> 4 -- charID 2
+	// >> 8 -- charID 3
+	// >> 12 -- lap (0,1,2)
+	// >> 14 -- everyoneReady?
+	// >> 15 -- race starting?
 
-#if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d, -- %d %d %d", type, size, trackByte, myDriverIndex, numPlayers);
-	for (int i = 0; i < numPlayers - 1; i++)
-	{
-		printf(" %d", CtrMain.recvBuf.data[3 + i]);
-	}
-	printf("\n");
-#endif
+	// >> 16 lapRow open?
+	// >> 17 trackID
+	// >> 22 clientID
+	// >> 24 numPlayers
 
-	char zero = 0;
-	char ogTrackByte = 0;
+	numPlayers = CtrMain.recvBuf.data[3];
 
+	// First two bytes are characters
 	// Get characterID for this player
 	// for characters 0 - 7:
 	// CharacterID[i] : 0x1608EA4 + 2 * i
-	for (int i = 0; i < numPlayers; i++)
+	for (int i = 0; i < numPlayers-1; i++)
 	{
-		characterIDs[i + 1] = CtrMain.recvBuf.data[3 + i];
+		characterIDs[i + 1] = (twoBytes[0] >> (4*i) & 0b1111);
+	}
+
+	char lapRow = (twoBytes[0] >> 12) & 0b11;
+	char everyoneReady = (twoBytes[0] >> 14) & 1;
+	char raceStarting = (twoBytes[0] >> 15) & 1;
+
+	char trackByte = (twoBytes[1]) & 0b11111;
+	char lapRowOpen = (twoBytes[1] >> 5) & 1;
+	char myDriverIndex = (twoBytes[1] >> 6) & 0b11;
+
+	char ogTrackByte = 0;
+
+	if(!everyoneReady)
+	{
+		// set controller mode to 0P mode, trigger error message
+		char _0 = 0;
+		WriteMem(0x800987C9, &_0, sizeof(_0));
+
+		// change the error message
+		WriteMem(0x800BC684, (char*)"waiting for players...", 23);
+	}
+
+	else
+	{
+		// set controller mode to 1P mode, remove error message
+		char _1 = 1;
+		WriteMem(0x800987C9, &_1, sizeof(_1));
 	}
 
 	// skip menu sync if you are host
 	if (isHost) return;
 
-	// close the lapRowSelector
-	WriteMem(0x800B59AC, &zero, sizeof(char));
-
 	// Get original track byte
 	ReadMem(0x800B46FA, &ogTrackByte, sizeof(char));
 
-	// set Text+Map address 
-	WriteMem(0x800B46FA, &trackByte, sizeof(char));
-
-	// set Video Address
-	WriteMem(0x800B59A8, &trackByte, sizeof(char));
-
-	// Set two variables to refresh the video
-	short s_One = 1;
-	WriteMem(0x800B59B8, &s_One, sizeof(short));
-	WriteMem(0x800B59BA, &s_One, sizeof(short));
-}
-
-void RecvLapMessage()
-{
-	// open the lapRowSelector menu, 
-	char one = 1;
-	WriteMem(0x800B59AC, &one, sizeof(char));
-
-	// convert to one byte
-	char lapByte = CtrMain.recvBuf.data[0];
-	WriteMem(0x8008D920, &lapByte, sizeof(lapByte));
-
-#if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size, lapByte);
-#endif
-
-	// change the spawn order
-
-	// Client 0:       0 1 2 3 4 5 6 7
-	// Client 1: 1 0       2 3 4 5 6 7
-	// Client 2: 2 0 1       3 4 5 6 7
-	// Client 3: 3 0 1 2       4 5 6 7
-
-	// used to set your own spawn
-	char zero = 0;
-
-	// loop through all drivers prior to your index
-	for (char i = 1; i <= myDriverIndex; i++)
+	if (trackByte != ogTrackByte)
 	{
-		char spawnValue = i - 1;
+		// set Text+Map address 
+		WriteMem(0x800B46FA, &trackByte, sizeof(char));
 
-		WriteMem(0x80080F28 + i, &spawnValue, sizeof(char));
+		// set Video Address
+		WriteMem(0x800B59A8, &trackByte, sizeof(char));
+
+		// Set two variables to refresh the video
+		short s_One = 1;
+		WriteMem(0x800B59B8, &s_One, sizeof(short));
+		WriteMem(0x800B59BA, &s_One, sizeof(short));
 	}
 
-	// set your own index
-	WriteMem(0x80080F28, &myDriverIndex, sizeof(char));
-}
+	// Set status of lapRow
+	WriteMem(0x800B59AC, &lapRowOpen, sizeof(char));
 
-void RecvStartLoadingMessage()
-{
+	if (lapRowOpen)
+	{
+		// convert to one byte
+		WriteMem(0x8008D920, &lapRow, sizeof(lapRow));
+
 #if TEST_DEBUG
-	printf("Recv -- Tag: %d, size: %d\n", type, size);
+		printf("Recv -- Tag: %d, size: %d, -- %d\n", type, size, lapByte);
 #endif
+		// change the spawn order
 
-	char one = 1;
-	char two = 2;
+		// Client 0:       0 1 2 3 4 5 6 7
+		// Client 1: 1 0       2 3 4 5 6 7
+		// Client 2: 2 0 1       3 4 5 6 7
+		// Client 3: 3 0 1 2       4 5 6 7
 
-	// set menuA to 2 and menuB to 1,
-	WriteMem(0x800B59AE, &two, sizeof(char));
-	WriteMem(0x800B59B0, &one, sizeof(char));
+		// used to set your own spawn
+		char zero = 0;
 
-	// Reset game frame counter to zero
-	int zero = 0;
-	WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
+		// loop through all drivers prior to your index
+		for (char i = 1; i <= myDriverIndex; i++)
+		{
+			char spawnValue = i - 1;
 
-	inGame = false;
-	startLine_wait = true;
+			WriteMem(0x80080F28 + i, &spawnValue, sizeof(char));
+		}
 
-	// This message will include number of players
-	// and array of characterIDs, save it for later
-	// Stop looking for messages until later
+		// set your own index
+		WriteMem(0x80080F28, &myDriverIndex, sizeof(char));
+	
+	}
+
+	if (raceStarting)
+	{
+		char one = 1;
+		char two = 2;
+
+		// set menuA to 2 and menuB to 1,
+		WriteMem(0x800B59AE, &two, sizeof(char));
+		WriteMem(0x800B59B0, &one, sizeof(char));
+
+		// Reset game frame counter to zero
+		int zero = 0;
+		WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
+
+		inGame = false;
+		startLine_wait = true;
+	}
 }
 
 void RecvPosMessage()
@@ -412,7 +430,48 @@ void RecvPosMessage()
 		// draw all AIs
 		for (int i = 0; i < numPlayers - 1; i++)
 		{
-			WriteMem(0x80096804 + 0x50 * (i+1) + 0x10, &CtrMain.recvBuf.data[Type3_Size * i + 0], sizeof(short));
+			WriteMem(0x80096804 + 0x50 * (i + 1) + 0x10, &CtrMain.recvBuf.data[Type3_Size * i + 0], sizeof(short));
+
+			// offset 6 has 8 bits
+			// unused
+			// unused
+			// 2b iterator
+			// 4b weapon
+
+			int netIterationCounter = (char)CtrMain.recvBuf.data[Type3_Size * i + 6] >> 4;
+
+			int AddrNetPlayer = AddrP1 + 0x670 * (i+1);
+
+			// X position
+			if (netIterationCounter == 0)
+			{
+				WriteMem(AddrNetPlayer + 0x2D4, &CtrMain.recvBuf.data[Type3_Size * i + 2], sizeof(int));
+			}
+
+			// Y position
+			if (netIterationCounter == 1)
+			{
+				WriteMem(AddrNetPlayer + 0x2D8, &CtrMain.recvBuf.data[Type3_Size * i + 2], sizeof(int));
+			}
+
+			// Z position
+			if (netIterationCounter == 2)
+			{
+				WriteMem(AddrNetPlayer + 0x2DC, &CtrMain.recvBuf.data[Type3_Size * i + 2], sizeof(int));
+			}
+
+			// rotation
+			if (netIterationCounter == 3)
+			{
+												// rotation, so it's short
+				WriteMem(AddrNetPlayer + 0x39A, &CtrMain.recvBuf.data[Type3_Size * i + 2], sizeof(short));
+			}
+
+			char weapon = CtrMain.recvBuf.data[Type3_Size * i + 6] & 0xf;
+			WriteMem(AddrNetPlayer + 0x36, &weapon, sizeof(char));
+
+			// Dont forget to handle weapon
+			// And also the '5' message needs the game clock
 		}
 	}
 }
@@ -438,8 +497,8 @@ void RecvStartRaceMessage()
 void (*RecvMessage[6]) () =
 {
 	RecvTrackMessage,
-	RecvLapMessage,
-	RecvStartLoadingMessage,
+	nullptr,
+	nullptr,
 	RecvPosMessage,
 	RecvCharacterMesssage,
 	RecvStartRaceMessage
@@ -606,8 +665,18 @@ void SendOnlinePlayersToRAM()
 	// put network characters into RAM
 	for (unsigned char i = 1; i < numPlayers; i++)
 	{
+		// Set character IDs
 		char oneByte = (char)characterIDs[(int)i];
 		WriteMem(0x80086E84 + 2 * i, &oneByte, sizeof(char)); // 4, for 2 shorts
+
+		// No clue why this fails
+#if 0
+		// Remove blinking on map for online players
+		int flags = 0;
+		ReadMem(AddrP1 + 0x670 * i + 0x2c8, &flags, sizeof(flags));
+		flags = flags & 0xFFEFFFFF;
+		WriteMem(AddrP1 + 0x670 * i + 0x2c8, &flags, sizeof(flags));
+#endif
 	}
 }
 
@@ -641,69 +710,51 @@ void HostShortcutKeys()
 void GetHostMenuState()
 {
 	// check if lapRowSelector is open
-	bool lapRowSelectorOpen = false;
+	char lapRowSelectorOpen = 0;
 	ReadMem(0x800B59AC, &lapRowSelectorOpen, sizeof(bool));
 
-	// if lap selector is closed
-	if (!lapRowSelectorOpen)
+	// battle maps and random maps
+	HostShortcutKeys();
+
+	// Get Track ID, send it to clients
+	ReadMem(0x800B46FA, &trackID, sizeof(trackID));
+
+	// 0 -> 3 laps
+	// 1 -> 5 laps
+	// 2 -> 7 laps
+	unsigned char lapRowSelected = 0;
+	ReadMem(0x8008D920, &lapRowSelected, sizeof(lapRowSelected));
+
+	
+	CtrMain.sendBuf.type = 0;
+	CtrMain.sendBuf.size = 5;
+
+	CtrMain.sendBuf.data[0] = trackID;
+	CtrMain.sendBuf.data[1] = (unsigned char)characterIDs[0];
+	CtrMain.sendBuf.data[2] = lapRowSelected;
+
+	// These determine if the loading screen has triggered yet
+	unsigned char menuA = 0;
+	unsigned char menuB = 0;
+	ReadMem(0x800B59AE, &menuA, sizeof(menuA));
+	ReadMem(0x800B59B0, &menuB, sizeof(menuB));
+
+	// if race is starting
+	if (menuA == 2 && menuB == 1)
 	{
-		// battle maps and random maps
-		HostShortcutKeys();
+		// wait for all at starting line
+		startLine_wait = true;
 
-		// Get Track ID, send it to clients
-		ReadMem(0x800B46FA, &trackID, sizeof(trackID));
+		// Reset game frame counter to zero
+		int zero = 0;
+		WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
 
-		// track, driver index, num characters, characters
+		inGame = false;
 
-		CtrMain.sendBuf.type = 0;
-		CtrMain.sendBuf.size = 4;
-
-		CtrMain.sendBuf.data[0] = trackID;
-		CtrMain.sendBuf.data[1] = (unsigned char)characterIDs[0];
-		
+		CtrMain.sendBuf.data[2] += 1 << 2;
 	}
-
-	// if lap selector is open
-	else
-	{
-		// These determine if the loading screen has triggered yet
-		unsigned char menuA = 0;
-		unsigned char menuB = 0;
-		ReadMem(0x800B59AE, &menuA, sizeof(menuA));
-		ReadMem(0x800B59B0, &menuB, sizeof(menuB));
-
-		// if race is starting
-		if (menuA == 2 && menuB == 1)
-		{
-			// wait for all at starting line
-			startLine_wait = true;
-
-			// Reset game frame counter to zero
-			int zero = 0;
-			WriteMem(0x80096B20 + 0x1cec, &zero, sizeof(int));
-
-			inGame = false;
-
-			// 2 means Start Loading
-			CtrMain.sendBuf.type = 2;
-			CtrMain.sendBuf.size = 2;
-		}
-
-		// if lap is being chosen
-		else
-		{
-			// 0 -> 3 laps
-			// 1 -> 5 laps
-			// 2 -> 7 laps
-			unsigned char lapRowSelected = 0;
-			ReadMem(0x8008D920, &lapRowSelected, sizeof(lapRowSelected));
-
-			// send info to all players
-			CtrMain.sendBuf.type = 1;
-			CtrMain.sendBuf.size = 3;
-			CtrMain.sendBuf.data[0] = lapRowSelected;
-		}
-	}
+	
+	CtrMain.sendBuf.data[2] += lapRowSelectorOpen << 3;
 }
 
 void SendCharacterID()
@@ -766,6 +817,13 @@ void HandleInjectionASM()
 	// Unlock all cars and tracks immediately
 	unsigned long long value = 0xFFFFFFFFFFFFFFFF;
 	WriteMem(0x8008E6EC, &value, sizeof(value));
+
+	// Ja ra, return asm, 
+	// disable weapons for players and enemies
+	// This is only used for player, becuase enemies are
+	// now disabled by locking their 0x624 offset to 30
+	int jaRa = 0x3e00008;
+	WriteMem(0x8006540C, &jaRa, sizeof(int));
 
 	int zero = 0;
 
@@ -887,24 +945,6 @@ void HandleTrackSelection()
 	{
 		// tell the server who you picked
 		SendCharacterID();
-	}
-
-	//if (trackSel_wait)
-	if (0)
-	{
-		// set controller mode to 0P mode, trigger error message
-		char _0 = 0;
-		WriteMem(0x800987C9, &_0, sizeof(_0));
-
-		// change the error message
-		WriteMem(0x800BC684, (char*)"waiting for players...", 23);
-	}
-
-	else
-	{
-		// set controller mode to 1P mode, remove error message
-		char _1 = 1;
-		WriteMem(0x800987C9, &_1, sizeof(_1));
 	}
 }
 
@@ -1067,9 +1107,64 @@ int main(int argc, char** argv)
 					)
 				{
 					CtrMain.sendBuf.type = 3;
-					CtrMain.sendBuf.size = 4;
+					CtrMain.sendBuf.size = Type3_Size+2;
 
 					ReadMem(0x80096804 + 0x50*0 + 0x10, &CtrMain.sendBuf.data[0], sizeof(short));
+					
+#if 0
+					if ((short)CtrMain.sendBuf.data[0] == 0)
+					{
+						framesIdle++;
+
+						if (framesIdle > 300)
+							framesIdle = 160;
+					}
+
+					else
+					{
+						framesIdle = 0;
+					}
+
+					// about 3 seconds
+					if (framesIdle > 150)
+						continue;
+#endif
+
+					iterationCounter = iterationCounter & 0b11; // 0 - 3
+
+					// X position
+					if (iterationCounter == 0)
+					{
+						ReadMem(AddrP1 + 0x2D4, &CtrMain.sendBuf.data[2], sizeof(int));
+					}
+
+					// Y position
+					else if (iterationCounter == 1)
+					{
+						ReadMem(AddrP1 + 0x2D8, &CtrMain.sendBuf.data[2], sizeof(int));
+					}
+
+					// Z position
+					else if (iterationCounter == 2)
+					{
+						ReadMem(AddrP1 + 0x2DC, &CtrMain.sendBuf.data[2], sizeof(int));
+					}
+
+					// Rotation
+					else if (iterationCounter == 3)
+					{
+						// really only needs to be 2 bytes, but whatever
+						ReadMem(AddrP1 + 0x39A, &CtrMain.sendBuf.data[2], sizeof(int));
+					}
+
+					// weapon
+					ReadMem(AddrP1 + 0x36, &CtrMain.sendBuf.data[6], sizeof(char));
+
+					// temporary
+					// overwrite instead of bit shifting
+					CtrMain.sendBuf.data[6] += (iterationCounter << 4);
+
+					iterationCounter++;
 				}
 
 				// if you finished or left the race
